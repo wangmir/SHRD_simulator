@@ -1,0 +1,69 @@
+#ifndef __VFLWRAPPER_H__
+#define __VFLWRAPPER_H__
+
+#include "RSP_Header.h"
+
+typedef struct ProgramOp
+{
+	RSP_UINT32* pData;
+	RSP_UINT32* pSpareData;
+	RSP_UINT8 nChannel;
+	RSP_UINT8 nBank;
+	RSP_UINT8 nPage;
+	RSP_UINT16 nBlock;
+	RSP_UINT16 bmpTargetSector;
+	RSP_UINT32 m_anVPN[2];
+	RSP_UINT32 m_anLPN[2];
+
+}RSPProgramOp;
+
+typedef struct ReadOp{
+	RSP_UINT32* pData;
+	RSP_UINT32* pSpareData;
+	RSP_UINT32 nReqID;
+	RSP_UINT16 bmpTargetSector;
+	RSP_UINT8 nChannel;
+	RSP_UINT8 nBank;
+	RSP_UINT8 nPage;
+	RSP_UINT16 nBlock;
+	RSP_UINT32 m_nVPN;
+	RSP_UINT32 m_nLPN;
+
+}RSPReadOp;
+
+typedef struct EraseOp{
+	RSP_UINT8 nChannel;
+	RSP_UINT8 nBank;
+	RSP_UINT16 nBlock;
+}RSPEraseOp;
+
+RSP_UINT32 __COREID__;
+
+class VFLWrapper
+{
+	public:
+
+	VFLWrapper(char *Working_dir);
+
+	void INC_PROGRAMPENDING();
+	void WAIT_PROGRAMPENDING();
+	void INC_ERASEPENDING();
+	void WAIT_ERASEPENDING();
+	void INC_READPENDING();
+	void WAIT_READPENDING();
+	void _GetSpareData(RSP_UINT32* spare_buf);
+	
+	bool Issue(RSPProgramOp RSPOp[4]);
+	bool Issue(RSPReadOp RSPOp);
+	bool Issue(RSPEraseOp RSPOp[4]);
+
+	bool MetaIssue(RSPProgramOp RSPOp[4]);
+	bool MetaIssue(RSPReadOp RSPOp);
+
+	bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+	bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+	bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+};
+
+
+#endif
