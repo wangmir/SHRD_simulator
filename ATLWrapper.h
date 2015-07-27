@@ -387,7 +387,7 @@ enum{
 		RSP_UINT32 get_vt_vblock(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_BOOL RSP_Open(RSP_VOID);
 
-		RSP_VOID RSP_BufferCopy(RSP_UINT32* pstDescBuffer, RSP_UINT32* pstSrcBuffer, RSP_UINT32 count);
+		RSP_VOID RSP_BufferCopy(RSP_UINT32* pstDescBuffer, RSP_UINT32* pstSrcBuffer, RSP_SECTOR_BITMAP bmp);
 		RSP_BOOL RSP_CheckBit(RSP_SECTOR_BITMAP nVar, RSP_SECTOR_BITMAP nBit);
 		RSP_VOID insert_bl_tail(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head* list_head);
 		RSP_VOID del_blk_from_list(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head* list_head);

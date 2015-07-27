@@ -3,6 +3,7 @@
 #include "VFLWrapper.h"
 
 char dir[1024];
+FILE *
 
 VFLWrapper::VFLWrapper(char * Working_dir){
 
@@ -22,25 +23,25 @@ bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
 
 }
 
-bool MetaIssue(RSPProgramOp RSPOp[4]){
+bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 
 }
 
-bool MetaIssue(RSPReadOp RSPOp){
+bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
 
 }
 
-bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
-
-
-}
-
-bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
+bool VFLWrapper::RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
 
 
 }
 
-bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
+bool VFLWrapper::RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
+
+
+}
+
+bool VFLWrapper::RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
 
 
 }
