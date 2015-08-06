@@ -23,7 +23,7 @@ namespace Hesper{
 
 	//FTL CORE
 #define NUM_FTL_CORE 2
-#define THIS_CORE (__COREID__ - 1) //should be changed into variable
+#define THIS_CORE (_COREID_ - 1) //should be changed into variable
 
 	//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
@@ -332,6 +332,8 @@ enum{
 
 		VFLWrapper* m_pVFLWrapper;
 
+		
+
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;
 		REMAP_HDR_ENTRY *remap_hdr_entry;
 
@@ -355,6 +357,11 @@ enum{
 
 #define MAX_EPOCH_NUMBER 65536
 		RSP_UINT32 epoch_number[WRITE_TYPE_NUM];
+
+		//for simulator
+		RSP_UINT32 _COREID_;
+		ATLWrapper(VFLWrapper *pVFL, RSP_UINT32 COREID); //overloading function for simulator
+		//end
 
 		ATLWrapper(VFLWrapper* pVFL);
 		virtual ~ATLWrapper(RSP_VOID);

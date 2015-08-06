@@ -128,6 +128,15 @@ namespace Hesper{
 	ATLWrapper::ATLWrapper(VFLWrapper* pVFL)
 	{
 		m_pVFLWrapper = pVFL;
+		_COREID_ = __COREID__;
+
+	}
+
+	//overloading function for simulator
+	ATLWrapper::ATLWrapper(VFLWrapper* pVFL, RSP_UINT32 CORE_ID){
+
+		m_pVFLWrapper = pVFL;
+		_COREID_ = CORE_ID; 
 	}
 
 	ATLWrapper::~ATLWrapper(RSP_VOID)

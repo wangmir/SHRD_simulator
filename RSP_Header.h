@@ -26,6 +26,6 @@ typedef RSP_UINT16 RSP_SECTOR_BITMAP;
 #define RSP_BYTE_PER_SECTOR 512
 #define RSP_BLOCK_PER_PLANE 1987
 
-#define __COREID__ 1
+#define __COREID__ 0 //not used on the simulator
 
 #endif

@@ -41,26 +41,33 @@ class VFLWrapper
 {
 	public:
 
-	VFLWrapper(char *Working_dir);
+		char dir[1024];
+		char temp_dir[1024];
 
-	void INC_PROGRAMPENDING();
-	void WAIT_PROGRAMPENDING();
-	void INC_ERASEPENDING();
-	void WAIT_ERASEPENDING();
-	void INC_READPENDING();
-	void WAIT_READPENDING();
-	void _GetSpareData(RSP_UINT32* spare_buf);
+		RSP_UINT32 latest_sparedata[4];
+
+		RSP_UINT32 CORE_ID;
+
+		VFLWrapper(char *Working_dir, RSP_UINT32 CORE);
+
+		void INC_PROGRAMPENDING();
+		void WAIT_PROGRAMPENDING();
+		void INC_ERASEPENDING();
+		void WAIT_ERASEPENDING();
+		void INC_READPENDING();
+		void WAIT_READPENDING();
+		void _GetSpareData(RSP_UINT32* spare_buf);
 	
-	bool Issue(RSPProgramOp RSPOp[4]);
-	bool Issue(RSPReadOp RSPOp);
-	bool Issue(RSPEraseOp RSPOp[4]);
+		bool Issue(RSPProgramOp RSPOp[4]);
+		bool Issue(RSPReadOp RSPOp);
+		bool Issue(RSPEraseOp RSPOp[4]);
 
-	bool MetaIssue(RSPProgramOp RSPOp[4]);
-	bool MetaIssue(RSPReadOp RSPOp);
+		bool MetaIssue(RSPProgramOp RSPOp[4]);
+		bool MetaIssue(RSPReadOp RSPOp);
 
-	bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
-	bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
-	bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+		bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+		bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+		bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 };
 
 

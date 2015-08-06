@@ -5,11 +5,6 @@
 #include "VFLWrapper.h"
 #include "ATLWrapper.h"
 
-char dir[1024];
-char temp_dir[1024];
-
-RSP_UINT32 latest_sparedata[4];
-
 /*	file name convention 
 	/-core-/-channel-/-bank-/-block-/
 	ex) dir/core_folder/channel_folder/bank_folder/data_blockno or oob_blockno
@@ -21,12 +16,14 @@ RSP_UINT32 latest_sparedata[4];
 	oob size is: two u32 per lpage
 */
 
-VFLWrapper::VFLWrapper(char * Working_dir){
+VFLWrapper::VFLWrapper(char * Working_dir, RSP_UINT32 CORE){
 
 	char temp[1024];
 	memset(dir, 0x00, 1024);
 	memset(temp, 0x00, 1024);
 	memcpy(dir, Working_dir, 1024);
+
+	CORE_ID = CORE;
 	
 	for (int i = 0; i < NUM_FTL_CORE; i++){
 
@@ -50,11 +47,11 @@ VFLWrapper::VFLWrapper(char * Working_dir){
 //READ
 bool VFLWrapper::Issue(RSPReadOp RSPOp){
 
-	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, THIS_CORE, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
 	FILE *fp_data = fopen(temp_dir, "rb");
 	RSP_ASSERT(fp_data);
 
-	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, THIS_CORE, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
 	FILE *fp_oob = fopen(temp_dir, "rb");
 	RSP_ASSERT(fp_oob);
 
@@ -90,11 +87,11 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
-		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, THIS_CORE, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
 		FILE *fp_data = fopen(temp_dir, "wb+");
 		RSP_ASSERT(fp_data);
 
-		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, THIS_CORE, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
 		FILE *fp_oob = fopen(temp_dir, "wb+");
 		RSP_ASSERT(fp_oob);
 
@@ -123,7 +120,7 @@ bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
 		RSP_UINT32 ret;
-		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, THIS_CORE, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
 		ret = remove(temp_dir);
 
 		//just warn because at the init, they erase empty block
