@@ -37,8 +37,6 @@ typedef struct EraseOp{
 	RSP_UINT16 nBlock;
 }RSPEraseOp;
 
-RSP_UINT32 __COREID__;
-
 class VFLWrapper
 {
 	public:

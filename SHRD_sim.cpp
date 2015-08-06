@@ -11,8 +11,45 @@ char trace_addr[1024];
 
 using namespace Hesper;
 
-static void run_FTL(FILE *fp){
-	
+struct CMD{
+	RSP_UINT8 RW; //read (1) or write (0), if RW > 1, then error
+	RSP_UINT32 LPN[2]; //if the request is read, then the LPN[0] refers request ID and LPN[1] shows actual LPN
+	RSP_UINT16 SectorBitmap;
+	RSP_UINT32 *BufferAddress;
+};
+
+static 
+
+
+static CMD parse_CMD(char *buff){
+
+	CMD command = { 0 };
+	char seps [] = " \t";
+	char *tr;
+
+
+
+	return  command;
+}
+
+static void run_FTL(FILE *fp_in){
+
+	char buff[1024];
+	RSP_UINT32 i = 0;
+
+	VFLWrapper* VFL = new VFLWrapper(working_dir);
+	ATLWrapper* ATL = new ATLWrapper(VFL);
+
+	CMD command;
+
+	ATL->RSP_Open();
+
+	while (fgets(buff, 1024, fp_in) != NULL){
+
+		command = parse_CMD(buff);
+
+
+	}
 }
 
 static void get_cmd(int argc, char *argv []){
@@ -33,18 +70,6 @@ static void get_cmd(int argc, char *argv []){
 			i++;
 			strcpy(working_dir, argv[i]);
 		}
-
-		if (strcmp(argv[i], "--core") == 0){
-
-			i++;
-			__COREID__ = atoi(argv[i]);
-
-			if (__COREID__ > 1){
-				printf("ERROR: core id is larger than 1\n");
-				getchar();
-			}
-
-		}
 	}
 }
 
@@ -54,10 +79,7 @@ void main(int argc, char *argv[]){
 	
 	get_cmd(argc, argv);
 	
-	VFLWrapper* VFL = new VFLWrapper(working_dir);
-	ATLWrapper* ATL = new ATLWrapper(VFL);
-	
-	fp_in = fopen(trace_addr, "r");
+	//fp_in = fopen(trace_addr, "r");
 
 	run_FTL(fp_in);
 
