@@ -5,6 +5,7 @@
 
 #include "ATLWrapper.h"
 #include "VFLWrapper.h"
+#include "HILWrapper.h"
 
 char working_dir[1024];
 char trace_addr[1024];
@@ -13,20 +14,24 @@ using namespace Hesper;
 
 struct CMD{
 	RSP_UINT8 RW; //read (1) or write (0), if RW > 1, then error
-	RSP_UINT32 LPN[2]; //if the request is read, then the LPN[0] refers request ID and LPN[1] shows actual LPN
+	RSP_UINT32 RID;
+	RSP_UINT32 LPN; 
 	RSP_UINT16 SectorBitmap;
-	RSP_UINT32 BufferAddress[1024];
+	RSP_UINT32 *BufferAddress;
 };
 
-static CMD parse_CMD(char *buff){
+static void parse_CMD(char *buff, CMD *command){
 
-	CMD command = { 0 };
 	char seps [] = " \t";
 	char *tr;
 
+	command->RW = 0;
+	command->LPN = rand() % (100 * 1024 * 256);
 
+	memset(command->BufferAddress, 0xff, 4096);
 
-	return  command;
+	command->SectorBitmap = 0xff;
+	
 }
 
 static void run_FTL(FILE *fp_in){
@@ -40,16 +45,34 @@ static void run_FTL(FILE *fp_in){
 	VFLWrapper* VFL_1 = new VFLWrapper(working_dir, 1);
 	ATLWrapper* ATL_1 = new ATLWrapper(VFL_1, 2);
 
-	CMD command = parse_CMD(buff);
+	HILWrapper* HIL = new HILWrapper(ATL_0, ATL_1);
+
+	CMD command;
+	command.BufferAddress = (RSP_UINT32 *) malloc(4096);
+
+	printf("\n==RUN FTL simulation==\n");
 
 	ATL_0->RSP_Open();
 	ATL_1->RSP_Open();
 
-	while (fgets(buff, 1024, fp_in) != NULL){
+	//while (fgets(buff, 1024, fp_in) != NULL){
+	while (1){
 
-		command = parse_CMD(buff);
+		i++;
+		if (i % 500 == 0)
+			printf("-");
 
+		parse_CMD(buff, &command);
 
+		if (command.RW){
+
+			HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
+
+		}
+		else{
+
+			HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
+		}
 
 	}
 }
@@ -81,7 +104,7 @@ void main(int argc, char *argv[]){
 	
 	get_cmd(argc, argv);
 	
-	//fp_in = fopen(trace_addr, "r");
+	fp_in = fopen(trace_addr, "r");
 
 	run_FTL(fp_in);
 

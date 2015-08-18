@@ -124,8 +124,8 @@ bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
 		ret = remove(temp_dir);
 
 		//just warn because at the init, they erase empty block
-		if (ret == -1)
-			printf("WARNING: ERASE FAILED\n");
+		/*if (ret == -1)
+			printf("WARNING: ERASE FAILED\n");*/
 	}
 	return true;
 }
