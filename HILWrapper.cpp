@@ -88,6 +88,11 @@ HILWrapper::HILWrapper(ATLWrapper *ATL0, ATLWrapper *ATL1){
 
 	memset(buff, 0x00, sizeof(HIL_buff) * NUM_BUFF);
 
+	free_buff_queue.size = 0;
+	urgent_queue[0].size = 0;
+	urgent_queue[1].size = 0;
+	
+
 	for (RSP_UINT32 iter = 0; iter < NUM_BUFF; iter++){
 		buff[iter].buff = (RSP_UINT32 *) malloc(BUFFER_SIZE_IN_KB * KB);
 		buff[iter].LPN[0] = RSP_INVALID_LPN;
@@ -112,7 +117,7 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 	RSP_UINT32 core = lpn % NUM_FTL_CORE;
 	RSP_UINT32 incore_lpn = lpn / NUM_FTL_CORE;
 
-	if (incore_lpn >= JN_LOG_START_IN_PAGE){
+	if (incore_lpn >= SPECIAL_LPN_START){
 
 		//urgent requests
 		HIL_buff *temp = NULL;
@@ -123,7 +128,7 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 			del_buff(&free_buff_queue, temp);
 
 			memcpy(temp->buff, buff, 4096);
-			temp->LPN[0] = lpn;
+			temp->LPN[0] = incore_lpn;
 			temp->BITMAP = 0xff & SectorBitmap;
 
 			temp->RW = WRITE;
@@ -145,7 +150,7 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 			temp = bank_queue[core][bank].list->before;
 
 			memcpy((RSP_UINT32 *) add_addr(temp->buff, 4096), buff, 4096);
-			temp->LPN[1] = lpn;
+			temp->LPN[1] = incore_lpn;
 			temp->BITMAP |= 0xff00 & (SectorBitmap << 8);
 			temp->RW = WRITE;
 
@@ -158,7 +163,7 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 			del_buff(&free_buff_queue, temp);
 
 			memcpy(temp->buff, buff, 4096);
-			temp->LPN[0] = lpn;
+			temp->LPN[0] = incore_lpn;
 			temp->BITMAP = 0xff & SectorBitmap;
 			temp->RW = WRITE;
 			

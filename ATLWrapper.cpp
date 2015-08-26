@@ -364,6 +364,8 @@ namespace Hesper{
 		RSPOSAL::RSP_MemSet(CACHE_ADDR, 0xffffffff, CMT_size);
 		RSPOSAL::RSP_MemSet(cache_count, 0xffffffff, NUM_CACHED_MAP * sizeof_u32);
 
+
+
 		return true;
 	}
 
@@ -1102,6 +1104,7 @@ namespace Hesper{
 			RSP_UINT32 bank_offset = get_vpn_offset_in_bank(vpn);
 			RSP_UINT16 superblk = (RSP_UINT16) get_super_block(bank_offset);
 			if (channel > RSP_NUM_CHANNEL){
+				//twrite data is not arrived yet
 				dbg1 = vpn;
 				dbg2 = remap_cnt;
 				dbg3 = entry->t_addr[remap_cnt];

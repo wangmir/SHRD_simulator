@@ -11,6 +11,7 @@ using namespace Hesper;
 #define NUM_BUFF (TOTAL_BUFF_SIZE_IN_MB * MB / (BUFFER_SIZE_IN_KB * KB))
 #define NUM_PERBANK_QUEUE (RSP_NUM_BANK * RSP_NUM_CHANNEL)
 #define BUFF_THRESHOLD 512
+#define SPECIAL_LPN_START 14397440
 
 #define WRITE 0 
 #define READ 1

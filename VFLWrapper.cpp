@@ -87,6 +87,9 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
+		if (RSPOp[plane].pData == NULL)
+			continue;
+
 		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
 		FILE *fp_data = fopen(temp_dir, "wb+");
 		RSP_ASSERT(fp_data);
