@@ -4,6 +4,7 @@
 
 #include "VFLWrapper.h"
 #include "ATLWrapper.h"
+#include "HILWrapper.h"
 
 /*	file name convention 
 	/-core-/-channel-/-bank-/-block-/
@@ -42,6 +43,10 @@ VFLWrapper::VFLWrapper(char * Working_dir, RSP_UINT32 CORE){
 			}
 		}
 	}
+}
+
+void VFLWrapper::HIL_ptr(void *pHIL){
+	pHILWrapper = pHIL;
 }
 
 //READ
@@ -85,6 +90,60 @@ bool VFLWrapper::Issue(RSPReadOp RSPOp){
 //WRITE
 bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 
+	HILWrapper *HIL = (HILWrapper *) pHILWrapper;
+
+	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
+
+		if (RSPOp[plane].pData == NULL)
+			continue;
+
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		FILE *fp_data = fopen(temp_dir, "wb+");
+		RSP_ASSERT(fp_data);
+
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		FILE *fp_oob = fopen(temp_dir, "wb+");
+		RSP_ASSERT(fp_oob);
+
+		//superpage aligned block file
+		//offset means lpn (4kb) offset on the superblock (plane * block)
+		RSP_UINT32 offset = RSPOp[plane].nPage;
+
+		fseek(fp_data, offset * RSP_BYTES_PER_PAGE, SEEK_SET);
+		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data);
+
+		//2 means o_addr and t_addr pair on the spare area
+		fseek(fp_oob, offset * 2 * LPAGE_PER_PPAGE, SEEK_SET);
+		fwrite((char *) RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob);
+
+		fclose(fp_data);
+		fclose(fp_oob);
+
+		HIL->HIL_BuffFree(RSPOp[plane].pData);
+
+	}
+	return true;
+
+}
+
+//ERASE
+bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
+
+	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
+
+		RSP_UINT32 ret;
+		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		ret = remove(temp_dir);
+
+		//just warn because at the init, they erase empty block
+		/*if (ret == -1)
+			printf("WARNING: ERASE FAILED\n");*/
+	}
+	return true;
+}
+
+bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
+
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
 		if (RSPOp[plane].pData == NULL)
@@ -114,28 +173,6 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 
 	}
 	return true;
-
-}
-
-//ERASE
-bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
-
-	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
-
-		RSP_UINT32 ret;
-		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
-		ret = remove(temp_dir);
-
-		//just warn because at the init, they erase empty block
-		/*if (ret == -1)
-			printf("WARNING: ERASE FAILED\n");*/
-	}
-	return true;
-}
-
-bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
-
-	return Issue(RSPOp);
 
 }
 

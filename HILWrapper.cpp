@@ -3,7 +3,6 @@
 #include <stdlib.h>
 
 #include "HILWrapper.h"
-#include "ATLWrapper.h"
 
 using namespace Hesper;
 
@@ -89,6 +88,7 @@ HILWrapper::HILWrapper(ATLWrapper *ATL0, ATLWrapper *ATL1){
 	memset(buff, 0x00, sizeof(HIL_buff) * NUM_BUFF);
 
 	free_buff_queue.size = 0;
+	waiting_buff_queue.size = 0;
 	urgent_queue[0].size = 0;
 	urgent_queue[1].size = 0;
 	
@@ -112,10 +112,40 @@ HILWrapper::HILWrapper(ATLWrapper *ATL0, ATLWrapper *ATL1){
 	global_rr_cnt = 0;
 }
 
+RSP_VOID HILWrapper::HIL_BuffFree(RSP_UINT32 *buff){
+
+	HIL_buff *hilbuff = NULL;
+
+	hilbuff = waiting_buff_queue.list;
+	if (hilbuff->buff == buff)
+	{
+		del_buff(&waiting_buff_queue, hilbuff);
+		HIL_buff_init(hilbuff);
+		insert_buff(&free_buff_queue, hilbuff);
+		return;
+	}
+
+	for (; hilbuff != waiting_buff_queue.list->before; hilbuff = hilbuff->next){
+
+		if (hilbuff->buff == buff)
+			break;
+
+	}
+
+	if (hilbuff->buff != buff)
+		_ASSERT(1);
+	
+	del_buff(&waiting_buff_queue, hilbuff);
+	HIL_buff_init(hilbuff);
+	insert_buff(&free_buff_queue, hilbuff);
+	return;
+}
+
 RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, RSP_UINT32 *buff){
 
 	RSP_UINT32 core = lpn % NUM_FTL_CORE;
 	RSP_UINT32 incore_lpn = lpn / NUM_FTL_CORE;
+	RSP_BOOL ret = true;
 
 	if (incore_lpn >= SPECIAL_LPN_START){
 
@@ -174,7 +204,7 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 		on_going_normal_request++;
 	}
 
-	on_going_request++;
+	on_going_request = on_going_urgent_request + on_going_normal_request;
 
 	if (on_going_request >= BUFF_THRESHOLD){
 		//fetch request into FTL
@@ -190,11 +220,17 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 
 				buffptr0 = urgent_queue[0].list;
 
-				pATLWrapper[0]->RSP_WritePage(buffptr0->LPN, buffptr0->BITMAP, buffptr0->buff);
+				ret = pATLWrapper[0]->RSP_WritePage(buffptr0->LPN, buffptr0->BITMAP, buffptr0->buff);
 
 				del_buff(&urgent_queue[0], buffptr0);
-				HIL_buff_init(buffptr0);
-				insert_buff(&free_buff_queue, buffptr0);
+				
+				if (ret == false){
+					HIL_buff_init(buffptr0);
+					insert_buff(&free_buff_queue, buffptr0);
+				}
+				else{
+					insert_buff(&waiting_buff_queue, buffptr0);
+				}
 				on_going_urgent_request--;
 
 			}
@@ -203,11 +239,18 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 
 				buffptr1 = urgent_queue[1].list;
 
-				pATLWrapper[1]->RSP_WritePage(buffptr1->LPN, buffptr1->BITMAP, buffptr1->buff);
+				ret = pATLWrapper[1]->RSP_WritePage(buffptr1->LPN, buffptr1->BITMAP, buffptr1->buff);
 
 				del_buff(&urgent_queue[1], buffptr1);
-				HIL_buff_init(buffptr1);
-				insert_buff(&free_buff_queue, buffptr1);
+
+				if (ret == false){
+					HIL_buff_init(buffptr1);
+					insert_buff(&free_buff_queue, buffptr1);
+				}
+				else{
+					insert_buff(&waiting_buff_queue, buffptr1);
+				}
+				
 				on_going_urgent_request--;
 			}
 		}
@@ -226,11 +269,18 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 
 						buffptr[core_iter] = bank_queue[core_iter][bank_no].list;
 
-						pATLWrapper[core_iter]->RSP_WritePage(buffptr[core_iter]->LPN, buffptr[core_iter]->BITMAP, buffptr[core_iter]->buff);
+						if (buffptr[core_iter]->LPN[0] == 14415876 || buffptr[core_iter]->LPN[1] == 14415876)
+							RSP_UINT32 err = 3;
 
 						del_buff(&bank_queue[core_iter][bank_no], buffptr[core_iter]);
-						HIL_buff_init(buffptr[core_iter]);
-						insert_buff(&free_buff_queue, buffptr[core_iter]);
+						insert_buff(&waiting_buff_queue, buffptr[core_iter]);
+
+						ret = pATLWrapper[core_iter]->RSP_WritePage(buffptr[core_iter]->LPN, buffptr[core_iter]->BITMAP, buffptr[core_iter]->buff);
+
+						if (ret == false){
+							HIL_BuffFree(buffptr[core_iter]->buff);
+						}
+						
 						on_going_normal_request--;
 
 						break;

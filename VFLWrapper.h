@@ -48,7 +48,11 @@ class VFLWrapper
 
 		RSP_UINT32 CORE_ID;
 
+		void *pHILWrapper;
+
 		VFLWrapper(char *Working_dir, RSP_UINT32 CORE);
+
+		void HIL_ptr(void *pHIL);
 
 		void INC_PROGRAMPENDING();
 		void WAIT_PROGRAMPENDING();

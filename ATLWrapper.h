@@ -308,22 +308,7 @@ enum{
 		RSP_INVALID_LPN
 	};
 
-	//DRAM MAP cache
-	static RSP_UINT32 NUM_CACHED_MAP;
-	static RSP_UINT32* CACHE_MAPPING_TABLE;
-	static RSP_UINT32* CACHE_ADDR;
-	static RSP_UINT32* cache_count;
-
-	static RSP_UINT32* MAP_MAPPING_TABLE;
-	static RSP_UINT32* MAP_VALID_COUNT;
-	static RSP_UINT32* MAPP2L;
-	static RSP_BOOL* CACHE_MAP_DIRTY_TABLE;
-
-	//Map Management
-	static RSP_UINT32 num_cached;
-
-	//Bank status
-	static NAND_bankstat* NAND_bank_state[NAND_NUM_CHANNELS];
+	
 #define RSP_ASSERT(bCondition) if (!(bCondition)) {while(1);}
 
 	class ATLWrapper
@@ -332,7 +317,22 @@ enum{
 
 		VFLWrapper* m_pVFLWrapper;
 
-		
+		//DRAM MAP cache
+		RSP_UINT32 NUM_CACHED_MAP;
+		RSP_UINT32* CACHE_MAPPING_TABLE;
+		RSP_UINT32* CACHE_ADDR;
+		RSP_UINT32* cache_count;
+
+		RSP_UINT32* MAP_MAPPING_TABLE;
+		RSP_UINT32* MAP_VALID_COUNT;
+		RSP_UINT32* MAPP2L;
+		RSP_BOOL* CACHE_MAP_DIRTY_TABLE;
+
+		//Map Management
+		RSP_UINT32 num_cached;
+
+		//Bank status
+		NAND_bankstat* NAND_bank_state[NAND_NUM_CHANNELS];
 
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;
 		REMAP_HDR_ENTRY *remap_hdr_entry;

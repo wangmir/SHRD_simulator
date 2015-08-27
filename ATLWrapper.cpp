@@ -993,7 +993,7 @@ namespace Hesper{
 				write_buffer_flush(channel, bank, REMAP_TYPE);
 			}
 		}
-		for (RSP_UINT32 remap_cnt = 0; remap_cnt <= remap_size - twrite_size; remap_cnt++){
+		for (RSP_UINT32 remap_cnt = 0; remap_cnt < remap_size - twrite_size; remap_cnt++){
 			__do_remap(REMAP_TYPE);	
 		}
 		
@@ -1265,7 +1265,6 @@ namespace Hesper{
 					}
 					else if (LPN[loop] >= TWRITE_CMD_IN_PAGE){
 
-						
 						twrite_header_handler((RSP_UINT32 *)add_addr(BufferAddress, loop * RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE));
 						buff_cnt++;
 						

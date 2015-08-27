@@ -11,7 +11,7 @@ using namespace Hesper;
 #define NUM_BUFF (TOTAL_BUFF_SIZE_IN_MB * MB / (BUFFER_SIZE_IN_KB * KB))
 #define NUM_PERBANK_QUEUE (RSP_NUM_BANK * RSP_NUM_CHANNEL)
 #define BUFF_THRESHOLD 32
-#define SPECIAL_LPN_START 14397440
+#define SPECIAL_LPN_START 14417920
 
 #define WRITE 0 
 #define READ 1
@@ -41,6 +41,7 @@ public:
 	HIL_queue *bank_queue[2]; //per bank queue
 	HIL_queue urgent_queue[2];
 	HIL_queue free_buff_queue;
+	HIL_queue waiting_buff_queue;
 	RSP_UINT32 on_going_request;
 	RSP_UINT32 on_going_urgent_request;
 	RSP_UINT32 on_going_normal_request;
@@ -50,6 +51,7 @@ public:
 
 	HILWrapper(ATLWrapper *ATL0, ATLWrapper *ATL1);
 
+	RSP_VOID HIL_BuffFree(RSP_UINT32 *buff);
 	RSP_BOOL HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, RSP_UINT32 *buff);
 	RSP_BOOL HIL_ReadLPN(RSP_UINT32 RID, RSP_LPN lpn, RSP_SECTOR_BITMAP SetorBitmap, RSP_UINT32 *buff);
 };

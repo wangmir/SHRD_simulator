@@ -243,6 +243,8 @@ static int get_CMD(FILE *fp, HILWrapper *HIL){
 			HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
 		}
 		else{
+			if (command.LPN == 28831753)
+				RSP_UINT32 err = 3;
 			HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
 		}
 	}
@@ -261,6 +263,9 @@ static void run_FTL(FILE *fp_in){
 	ATLWrapper* ATL_1 = new ATLWrapper(VFL_1, 2);
 
 	HILWrapper* HIL = new HILWrapper(ATL_0, ATL_1);
+
+	VFL_0->HIL_ptr(HIL);
+	VFL_1->HIL_ptr(HIL);
 
 	printf("\n==RUN FTL simulation==\n");
 
