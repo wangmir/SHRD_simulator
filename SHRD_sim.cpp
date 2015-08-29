@@ -282,7 +282,7 @@ static void run_FTL(FILE *fp_in){
 		int ret = 0;
 
 		i++;
-		if (i % 1000 == 0)
+		if (i % 200 == 0)
 			printf("-");
 
 		ret = get_CMD(fp_in, HIL);

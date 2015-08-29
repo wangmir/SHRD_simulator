@@ -210,80 +210,90 @@ RSP_BOOL HILWrapper::HIL_WriteLPN(RSP_LPN lpn, RSP_SECTOR_BITMAP SectorBitmap, R
 		//fetch request into FTL
 
 		//always send two requests
+		while (1){
+			HIL_buff *buffptr0 = NULL, *buffptr1 = NULL;
 
-		HIL_buff *buffptr0 = NULL, *buffptr1 = NULL;
+			on_going_request = on_going_urgent_request + on_going_normal_request;
 
-		if (on_going_urgent_request){
-			//need to handle urgent request
+			if (!on_going_request)
+				break;
 
-			if (urgent_queue[0].size){
+			if (on_going_urgent_request){
+				//need to handle urgent request
 
-				buffptr0 = urgent_queue[0].list;
+				if (urgent_queue[0].size){
 
-				ret = pATLWrapper[0]->RSP_WritePage(buffptr0->LPN, buffptr0->BITMAP, buffptr0->buff);
+					buffptr0 = urgent_queue[0].list;
 
-				del_buff(&urgent_queue[0], buffptr0);
-				
-				if (ret == false){
-					HIL_buff_init(buffptr0);
-					insert_buff(&free_buff_queue, buffptr0);
+					ret = pATLWrapper[0]->RSP_WritePage(buffptr0->LPN, buffptr0->BITMAP, buffptr0->buff);
+
+					del_buff(&urgent_queue[0], buffptr0);
+
+					if (ret == false){
+						HIL_buff_init(buffptr0);
+						insert_buff(&free_buff_queue, buffptr0);
+					}
+					else{
+						insert_buff(&waiting_buff_queue, buffptr0);
+					}
+					on_going_urgent_request--;
+
 				}
-				else{
-					insert_buff(&waiting_buff_queue, buffptr0);
-				}
-				on_going_urgent_request--;
 
+				if (urgent_queue[1].size){
+
+					buffptr1 = urgent_queue[1].list;
+
+					ret = pATLWrapper[1]->RSP_WritePage(buffptr1->LPN, buffptr1->BITMAP, buffptr1->buff);
+
+					del_buff(&urgent_queue[1], buffptr1);
+
+					if (ret == false){
+						HIL_buff_init(buffptr1);
+						insert_buff(&free_buff_queue, buffptr1);
+					}
+					else{
+						insert_buff(&waiting_buff_queue, buffptr1);
+					}
+
+					on_going_urgent_request--;
+				}
 			}
+			else {
+				//pick with round robin from normal bank queue
 
-			if (urgent_queue[1].size){
+				HIL_buff *buffptr[2] = { NULL, NULL };
 
-				buffptr1 = urgent_queue[1].list;
+				for (RSP_UINT32 core_iter = 0; core_iter < NUM_FTL_CORE; core_iter++){
 
-				ret = pATLWrapper[1]->RSP_WritePage(buffptr1->LPN, buffptr1->BITMAP, buffptr1->buff);
+					for (RSP_UINT32 bank_iter = 0; bank_iter < NUM_PERBANK_QUEUE; bank_iter++){
 
-				del_buff(&urgent_queue[1], buffptr1);
+						RSP_UINT32 bank_no = (global_rr_cnt + bank_iter) % NUM_PERBANK_QUEUE;
 
-				if (ret == false){
-					HIL_buff_init(buffptr1);
-					insert_buff(&free_buff_queue, buffptr1);
-				}
-				else{
-					insert_buff(&waiting_buff_queue, buffptr1);
-				}
-				
-				on_going_urgent_request--;
-			}
-		}
-		else {
-			//pick with round robin from normal bank queue
+						if (bank_queue[core_iter][bank_no].size){
 
-			HIL_buff *buffptr[2] = { NULL, NULL };
+							buffptr[core_iter] = bank_queue[core_iter][bank_no].list;
 
-			for (RSP_UINT32 core_iter = 0; core_iter < NUM_FTL_CORE; core_iter++){
+							if (buffptr[core_iter]->LPN[0] == 14415876 || buffptr[core_iter]->LPN[1] == 14415876)
+								RSP_UINT32 err = 3;
 
-				for (RSP_UINT32 bank_iter = 0; bank_iter < NUM_PERBANK_QUEUE; bank_iter++){
+							del_buff(&bank_queue[core_iter][bank_no], buffptr[core_iter]);
+							insert_buff(&waiting_buff_queue, buffptr[core_iter]);
 
-					RSP_UINT32 bank_no = (global_rr_cnt + bank_iter) % NUM_PERBANK_QUEUE;
+							for (RSP_UINT8 cnt = 0; cnt < 2; cnt++){
+								if (buffptr[core_iter]->LPN[cnt] != RSP_INVALID_LPN){
+									on_going_normal_request--;
+								}
+							}
 
-					if (bank_queue[core_iter][bank_no].size){
+							ret = pATLWrapper[core_iter]->RSP_WritePage(buffptr[core_iter]->LPN, buffptr[core_iter]->BITMAP, buffptr[core_iter]->buff);
 
-						buffptr[core_iter] = bank_queue[core_iter][bank_no].list;
+							if (ret == false){
+								HIL_BuffFree(buffptr[core_iter]->buff);
+							}
 
-						if (buffptr[core_iter]->LPN[0] == 14415876 || buffptr[core_iter]->LPN[1] == 14415876)
-							RSP_UINT32 err = 3;
-
-						del_buff(&bank_queue[core_iter][bank_no], buffptr[core_iter]);
-						insert_buff(&waiting_buff_queue, buffptr[core_iter]);
-
-						ret = pATLWrapper[core_iter]->RSP_WritePage(buffptr[core_iter]->LPN, buffptr[core_iter]->BITMAP, buffptr[core_iter]->buff);
-
-						if (ret == false){
-							HIL_BuffFree(buffptr[core_iter]->buff);
+							break;
 						}
-						
-						on_going_normal_request--;
-
-						break;
 					}
 				}
 			}

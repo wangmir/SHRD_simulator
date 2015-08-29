@@ -795,7 +795,7 @@ namespace Hesper{
 		//RSP_BufferCopy((RSP_UINT32 *)twrite_entry, buff, SECTORS_PER_PAGE / LPAGE_PER_PPAGE);
 		RSPOSAL::RSP_MemCpy((RSP_UINT32 *)twrite_entry, buff, TWRITE_HDR_BYTE_SIZE);
 
-		//RSPOSAL::RSP_MemSet((RSP_UINT32 *)twrite_entry->write_complete, 0x00, sizeof(RSP_BOOL)* NUM_MAX_TWRITE_ENTRY);
+		RSPOSAL::RSP_MemSet((RSP_UINT32 *)twrite_entry->write_complete, 0x00, sizeof(RSP_BOOL)* NUM_MAX_TWRITE_ENTRY);
 	
 		if(twrite_entry->io_count % NUM_FTL_CORE == 0)
 			twrite_entry->remained = twrite_entry->io_count / NUM_FTL_CORE;
@@ -857,6 +857,9 @@ namespace Hesper{
 
 		if (twrite_entry->o_addr[offset] == RSP_INVALID_LPN)
 			*oLPN = RSP_INVALID_LPN;
+
+		//dbg
+		twrite_entry->write_complete[offset] = true;
 
 		return twrite_entry;
 	}
@@ -1240,7 +1243,13 @@ namespace Hesper{
 		RSP_UINT8 buff_cnt = 0;
 		RSP_UINT32 *temp_buf = NULL;
 		RSP_BOOL ret = true;
+		RSP_BOOL DO_REMAP_FLAG = false;
 		TWRITE_HDR_ENTRY *twrite_entry = NULL;
+
+		//dbg
+		if (LPN[0] == 14415835 ||  LPN[1] == 14415835)
+			RSP_UINT32 err = 3;
+		//dbg end
 		
 		for (loop = 0; loop < LPAGE_PER_PPAGE; loop++)
 		{
@@ -1327,7 +1336,8 @@ namespace Hesper{
 					switch_JN_todo_log();
 				else if (write_type != SHRD_SW){
 					if (twrite_entry->remained == 0){
-						do_remap(write_type);
+						//do_remap(write_type);
+						DO_REMAP_FLAG = true;
 						del_twrite_entry(twrite_entry, (write_type == SHRD_RW) ? &RW_twrite_list : &JN_twrite_list);
 						insert_twrite_entry(twrite_entry, &free_twrite_list);
 					}
@@ -1336,6 +1346,11 @@ namespace Hesper{
 			else{
 				buff_cnt++;
 			}
+		}
+
+		//need to modify if apply JN on the SHRD
+		if (DO_REMAP_FLAG){
+			do_remap(SHRD_RW);
 		}
 		
 		if(buff_cnt == LPAGE_PER_PPAGE)
@@ -1367,6 +1382,11 @@ namespace Hesper{
 			set_vpn(lpn, VC_MAX, Prof_RW);
 			return false;
 		}
+
+		//dbg
+		if (lpn == 28786)
+			RSP_UINT32 err = 3;
+		//dbg
 
 
 		if(WRITE_TYPE != SHRD_SW)
@@ -1808,6 +1828,16 @@ namespace Hesper{
 		map_page = lpn / NUM_PAGES_PER_MAP;
 		map_page_offset = lpn % NUM_PAGES_PER_MAP;
 
+		//dbg
+		if (lpn == 13652)
+			RSP_UINT32 err = 3;
+		//dbg
+
+		//dbg
+		if (lpn == 28786)
+			RSP_UINT32 err = 3;
+		//dbg
+
 		if(lpn >= NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE){
 			dbg1 = lpn;
 			dbg2 = NUM_LBLK;
@@ -1943,6 +1973,11 @@ namespace Hesper{
 
 		RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
+
+		//dbg
+		if (lpn == 28786)
+			RSP_UINT32 err = 3;
+		//dbg
 
 		//check this map_page is in DRAM
 		for (loop = 0; loop < NUM_CACHED_MAP; loop++)

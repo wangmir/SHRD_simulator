@@ -98,11 +98,11 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 			continue;
 
 		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
-		FILE *fp_data = fopen(temp_dir, "wb+");
+		FILE *fp_data = fopen(temp_dir, "wb");
 		RSP_ASSERT(fp_data);
 
 		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
-		FILE *fp_oob = fopen(temp_dir, "wb+");
+		FILE *fp_oob = fopen(temp_dir, "wb");
 		RSP_ASSERT(fp_oob);
 
 		//superpage aligned block file
@@ -149,12 +149,17 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 		if (RSPOp[plane].pData == NULL)
 			continue;
 
+		//dbg
+		if (CORE_ID == 1 && RSPOp[plane].nChannel == 2 && RSPOp[plane].nBank == 0 && RSPOp[plane].nBlock == 0)
+			RSP_UINT32 err = 3;
+		//dbgend
+
 		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
-		FILE *fp_data = fopen(temp_dir, "wb+");
+		FILE *fp_data = fopen(temp_dir, "wb");
 		RSP_ASSERT(fp_data);
 
 		sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
-		FILE *fp_oob = fopen(temp_dir, "wb+");
+		FILE *fp_oob = fopen(temp_dir, "wb");
 		RSP_ASSERT(fp_oob);
 
 		//superpage aligned block file
