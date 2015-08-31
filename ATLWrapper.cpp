@@ -993,6 +993,7 @@ namespace Hesper{
 
 		for (RSP_UINT32 channel = 0; channel < NAND_NUM_CHANNELS; channel++){
 			for (RSP_UINT32 bank = 0; bank < BANKS_PER_CHANNEL; bank++){
+				write_buffer_flush(channel, bank, SHRD_SW);  //for the old_vpn on the write buffer, we need to flush SW buff for reliability
 				write_buffer_flush(channel, bank, REMAP_TYPE);
 			}
 		}
