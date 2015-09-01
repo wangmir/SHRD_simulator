@@ -23,7 +23,7 @@ namespace Hesper{
 
 	//FTL CORE
 #define NUM_FTL_CORE 2
-#define THIS_CORE (__COREID__ - 1) //should be changed into variable
+#define THIS_CORE (_COREID_ - 1) //should be changed into variable
 
 	//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
