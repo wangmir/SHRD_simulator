@@ -243,8 +243,6 @@ static int get_CMD(FILE *fp, HILWrapper *HIL){
 			HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
 		}
 		else{
-			if (command.LPN == 28831753)
-				RSP_UINT32 err = 3;
 			HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
 		}
 	}
@@ -284,7 +282,8 @@ static void run_FTL(FILE *fp_in){
 		i++;
 		if (i % 100 == 0)
 			printf("-");
-
+		if (i == 13147)
+			RSP_UINT32 err = 3;
 		ret = get_CMD(fp_in, HIL);
 		if (ret == 0)
 			break;

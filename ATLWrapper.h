@@ -48,7 +48,7 @@ namespace Hesper{
 	static RSP_UINT32 OP_BLKS = 7264;
 	static RSP_UINT32 NUM_LBLK;
 	static RSP_UINT32 NUM_PBLK;
-	static RSP_UINT32 CMT_size = 2 * MB; //2MB
+	static RSP_UINT32 CMT_size = 64 * KB; //2MB
 
 	//Mapping data
 

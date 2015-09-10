@@ -53,11 +53,11 @@ void VFLWrapper::HIL_ptr(void *pHIL){
 bool VFLWrapper::Issue(RSPReadOp RSPOp){
 
 	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
-	FILE *fp_data = fopen(temp_dir, "ab");
+	FILE *fp_data = fopen(temp_dir, "rb");
 	RSP_ASSERT(fp_data);
 
 	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
-	FILE *fp_oob = fopen(temp_dir, "ab");
+	FILE *fp_oob = fopen(temp_dir, "rb");
 	RSP_ASSERT(fp_oob);
 
 	//superpage aligned block file
@@ -67,6 +67,8 @@ bool VFLWrapper::Issue(RSPReadOp RSPOp){
 	if (RSPOp.bmpTargetSector == 0xff00){
 		offset++;
 	}
+
+	//memset(RSPOp.pData, 0xff, 4096);
 
 	fseek(fp_data, offset * RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, SEEK_SET);
 	fread((char *)RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, 1, fp_data);
@@ -181,9 +183,34 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 
 }
 
+//METAISSUE read performs with 8KB page (not 4KB LPAGE)
 bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
 
-	return Issue(RSPOp);
+	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_data_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+	FILE *fp_data = fopen(temp_dir, "rb");
+	RSP_ASSERT(fp_data);
+
+	sprintf(temp_dir, "%s/core_%d/channel_%d/bank_%d/blk_oob_%d", dir, CORE_ID, RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+	FILE *fp_oob = fopen(temp_dir, "rb");
+	RSP_ASSERT(fp_oob);
+
+	//superpage aligned block file
+	//offset means lpn (4kb) offset on the superblock (plane * block)
+	RSP_UINT32 offset = RSPOp.nPage;
+
+	if (RSPOp.bmpTargetSector == 0xff00){
+		offset++;
+	}
+
+	//memset(RSPOp.pData, 0xff, 4096);
+
+	fseek(fp_data, offset * RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, SEEK_SET);
+	fread((char *) RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data);
+
+	fclose(fp_data);
+	fclose(fp_oob);
+
+	return true;
 }
 
 void VFLWrapper::_GetSpareData(RSP_UINT32 * spare_buf){
