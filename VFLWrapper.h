@@ -46,6 +46,8 @@ class VFLWrapper
 
 		RSP_UINT32 latest_sparedata[4];
 
+		RSP_UINT32 profile[128];
+
 		RSP_UINT32 CORE_ID;
 
 		void *pHILWrapper;
@@ -73,6 +75,5 @@ class VFLWrapper
 		bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 };
-
 
 #endif

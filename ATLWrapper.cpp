@@ -963,7 +963,8 @@ namespace Hesper{
 			epoch_number[SHRD_RW] = (epoch_number[SHRD_RW] + 1) % MAX_EPOCH_NUMBER;
 			insert_remap_entry(remap_entry, &RW_remap_list);
 			m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_cnt, 1);
-			do_remap(SHRD_RW);
+			//do_remap(SHRD_RW);
+			__do_remap(SHRD_RW);
 		}
 		else if (remap_entry->t_addr_start / NUM_FTL_CORE >= JN_LOG_START_IN_PAGE){
 			remap_entry->epoch = epoch_number[SHRD_JN];
@@ -1396,10 +1397,10 @@ namespace Hesper{
 			}
 		}
 
-		//need to modify if apply JN on the SHRD
-		if (DO_REMAP_FLAG){
-			do_remap(SHRD_RW);
-		}
+		////need to modify if apply JN on the SHRD
+		//if (DO_REMAP_FLAG){
+		//	do_remap(SHRD_RW);
+		//}
 		
 		if(buff_cnt == LPAGE_PER_PPAGE)
 			return false;
@@ -2022,8 +2023,9 @@ namespace Hesper{
 		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
 
 		//dbg
-		if (lpn == 17537)
+		if ((lpn == 180 / 2 || lpn == 208 / 2 || lpn ==340 / 2 || lpn == 494 / 2)&& _COREID_ == 1)
 			RSP_UINT32 err = 3;
+		
 		//dbg
 
 		//check this map_page is in DRAM

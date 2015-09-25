@@ -287,15 +287,12 @@ static void run_FTL(FILE *fp_in){
 		ret = get_CMD(fp_in, HIL);
 		if (ret == 0)
 			break;
-		/*
-		if (command.RW){
-			HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
-		}
-		else{
-			HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
-		}
-		*/
 	}
+
+	RSP_UINT32 *profile0 = VFL_0->profile;
+	RSP_UINT32 *profile1 = VFL_1->profile;
+
+
 
 }
 

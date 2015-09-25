@@ -220,15 +220,21 @@ void VFLWrapper::_GetSpareData(RSP_UINT32 * spare_buf){
 
 bool VFLWrapper::RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
 
+	profile[idx] = ProfileData;
+
 	return true;
 }
 
 bool VFLWrapper::RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
 
+	profile[idx] += ProfileData;
+
 	return true;
 }
 
 bool VFLWrapper::RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
+
+	profile[idx] -= ProfileData;
 
 	return true;
 }
