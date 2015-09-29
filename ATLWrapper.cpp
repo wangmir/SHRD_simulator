@@ -1066,7 +1066,8 @@ namespace Hesper{
 			remap_end_tLPN--;
 		}
 		
-		
+
+		//
 		for (RSP_UINT32 remained = 0; remained <= remap_end_tLPN - remap_start_tLPN; remained++){
 			RSP_UINT32 vpn;
 			if(REMAP_TYPE == SHRD_RW)
@@ -1130,6 +1131,7 @@ namespace Hesper{
 			RSP_UINT8 bank = (RSP_UINT8) get_bank_from_vpn(vpn);
 			RSP_UINT32 bank_offset = get_vpn_offset_in_bank(vpn);
 			RSP_UINT16 superblk = (RSP_UINT16) get_super_block(bank_offset);
+
 			if (channel > RSP_NUM_CHANNEL){
 				//twrite data is not arrived yet
 				dbg1 = vpn;
@@ -1175,8 +1177,11 @@ namespace Hesper{
 					set_vcount(old_channel, old_bank, old_block, get_vcount(old_channel, old_bank, old_block) - 1);
 				}
 			}
+
+			//because we decrease the vcount at the top of __do_remap
 			if(!is_in_write_buffer(vpn))
 				set_vcount(channel, bank, superblk, get_vcount(channel, bank, superblk) + 1);
+
 			if(REMAP_TYPE == SHRD_RW)
 				set_vpn(entry->o_addr[remap_cnt] / NUM_FTL_CORE, vpn, Prof_RW_remap);
 			else
@@ -1184,6 +1189,7 @@ namespace Hesper{
 				
 		}
 
+		//set tLPN map as VC_MAX
 		//decrease remained count on blk struct
 		for (RSP_UINT32 remained = 0; remained <= remap_end_tLPN - remap_start_tLPN; remained++){
 			RSP_UINT32 vpn;
