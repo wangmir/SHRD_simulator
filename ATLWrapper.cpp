@@ -1047,24 +1047,9 @@ namespace Hesper{
 	
 		REMAP_HDR_LIST* remap_list = (REMAP_TYPE == SHRD_RW) ? &RW_remap_list : &JN_remap_list;
 		REMAP_HDR_ENTRY *entry = remap_list->head;
-		
-		RSP_UINT32 remap_start_tLPN;
-		RSP_UINT32 remap_end_tLPN;
 
 		//dbg
 		dbg_remap_entry = (REMAP_DBG_ENTRY *)entry;
-
-		remap_start_tLPN = entry->t_addr_start / NUM_FTL_CORE;
-		remap_end_tLPN = entry->t_addr_end / NUM_FTL_CORE;
-
-		if((entry->t_addr_start % NUM_FTL_CORE) && (THIS_CORE == 0)){
-			//start from odd number, this core is core 0
-			remap_start_tLPN++;
-		}
-		if((entry->t_addr_end % NUM_FTL_CORE == 0) && THIS_CORE){
-			//end with even number, this core is core 1
-			remap_end_tLPN--;
-		}
 
 		//t_addr array is sorted with o_addr.
 		for (RSP_UINT32 remap_cnt = 0; remap_cnt < entry->remap_count; remap_cnt++){
