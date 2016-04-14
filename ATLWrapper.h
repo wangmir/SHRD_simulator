@@ -1,6 +1,8 @@
 #ifndef _FTL_H
 #define _FTL_H
 
+#include <stdio.h>
+
 #include "RSP_Header.h"
 #include "RSP_OSAL.h"
 
@@ -73,7 +75,7 @@ namespace Hesper{
 	//VPN layout
 	// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
 
-#define RW_LOG_SIZE_IN_PAGE (16 * MB >> 12) //for test
+#define RW_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define RW_LOG_START_IN_PAGE (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE - RW_LOG_SIZE_IN_PAGE)
 #define JN_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define JN_LOG_START_IN_PAGE RW_LOG_START_IN_PAGE - JN_LOG_SIZE_IN_PAGE
@@ -84,7 +86,7 @@ namespace Hesper{
 #define NUM_MAX_TWRITE (32)
 #define NUM_MAX_REMAP (32)
 #define NUM_MAX_TWRITE_ENTRY (128)
-#define NUM_MAX_REMAP_ENTRY  (510)
+#define NUM_MAX_REMAP_ENTRY  (511)
 
 #define TWRITE_CMD_IN_PAGE  (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE)
 #define REMAP_CMD_IN_PAGE (TWRITE_CMD_IN_PAGE + NUM_MAX_TWRITE) //# of NCQ
@@ -248,6 +250,8 @@ enum{
 		RSP_BOOL map_start;
 		RSP_BOOL meta_start;
 
+		RSP_UINT32 remap_inbuff_cnt;
+
 		block_struct* block_list;
 		block_struct_head free_list;
 		block_struct_head JN_log_list;
@@ -273,8 +277,6 @@ enum{
 
 	struct REMAP_HDR_ENTRY
 	{
-		RSP_UINT32 t_addr_start;
-		RSP_UINT32 t_addr_end;
 		RSP_UINT32 remap_count;
 		RSP_UINT32 t_addr[NUM_MAX_REMAP_ENTRY]; //need to recalculate addr 
 		RSP_UINT32 o_addr[NUM_MAX_REMAP_ENTRY];
@@ -309,7 +311,7 @@ enum{
 	};
 
 	
-#define RSP_ASSERT(bCondition) if (!(bCondition)) {while(1);}
+#define RSP_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT");while(1);}
 
 	class ATLWrapper
 	{

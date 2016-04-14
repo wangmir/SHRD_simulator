@@ -6,6 +6,7 @@
 #include "ATLWrapper.h"
 #include "VFLWrapper.h"
 #include "HILWrapper.h"
+#include "SHRD_host.h"
 
 char working_dir[1024];
 char trace_addr[1024];
@@ -50,8 +51,6 @@ struct SHRD_TWRITE_HEADER{
 };
 
 struct SHRD_REMAP_DATA{
-	RSP_UINT32 t_addr_start;
-	RSP_UINT32 t_addr_end;
 	RSP_UINT32 remap_count;
 	RSP_UINT32 t_addr[NUM_MAX_REMAP_ENTRY];
 	RSP_UINT32 o_addr[NUM_MAX_REMAP_ENTRY];
@@ -131,10 +130,6 @@ static CMD_LINE get_CMD_LINE(char *buff){
 		}
 		else{
 			cmdline.type = REMAP_DATA_FRONT;
-			cmdline.start = atoi(tr);
-			tr = strtok(NULL, seps);
-			cmdline.end = atoi(tr);
-			tr = strtok(NULL, seps);
 			cmdline.count = atoi(tr);
 		}
 
@@ -214,8 +209,6 @@ static int get_CMD(FILE *fp, HILWrapper *HIL){
 				getchar();
 			}
 			remap_data = (SHRD_REMAP_DATA *) command.BufferAddress;
-			remap_data->t_addr_start = cmdline.start;
-			remap_data->t_addr_end = cmdline.end;
 			remap_data->remap_count = cmdline.count;
 		}
 		else if (cmdline.type == REMAP_DATA_ADDR){
@@ -239,6 +232,14 @@ static int get_CMD(FILE *fp, HILWrapper *HIL){
 		command.RID = 0;
 		command.LPN = LPN_start + iter;
 
+		if (command.LPN == 14406865 * 2)
+			RSP_UINT32 err = 3;
+
+		if (command.LPN == 28835870){
+			if (twrite_hdr->t_addr_start == 28813720)
+				RSP_UINT32 err = 3;
+		}
+
 		if (command.RW){
 			HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
 		}
@@ -250,7 +251,7 @@ static int get_CMD(FILE *fp, HILWrapper *HIL){
 	
 }
 
-static void run_FTL(FILE *fp_in){
+static void run_trace(FILE *fp_in){
 
 	RSP_UINT32 i = 0;
 
@@ -265,7 +266,7 @@ static void run_FTL(FILE *fp_in){
 	VFL_0->HIL_ptr(HIL);
 	VFL_1->HIL_ptr(HIL);
 
-	printf("\n==RUN FTL simulation==\n");
+	printf("\n==RUN FTL simulation with trace==\n");
 
 	if (fp_in == NULL){
 
@@ -291,9 +292,47 @@ static void run_FTL(FILE *fp_in){
 
 	RSP_UINT32 *profile0 = VFL_0->profile;
 	RSP_UINT32 *profile1 = VFL_1->profile;
+}
 
+static void run_workload() {
 
+	RSP_UINT32 i = 0;
 
+	VFLWrapper* VFL_0 = new VFLWrapper(working_dir, 0);
+	ATLWrapper* ATL_0 = new ATLWrapper(VFL_0, 1);
+
+	VFLWrapper* VFL_1 = new VFLWrapper(working_dir, 1);
+	ATLWrapper* ATL_1 = new ATLWrapper(VFL_1, 2);
+
+	HILWrapper* HIL = new HILWrapper(ATL_0, ATL_1);
+
+	VFL_0->HIL_ptr(HIL);
+	VFL_1->HIL_ptr(HIL);
+
+	printf("\n==RUN FTL simulation with workload generator==\n");
+
+	ATL_0->RSP_Open();
+	ATL_1->RSP_Open();
+
+	//HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
+	//HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
+
+	SHRD_host *HOST = new SHRD_host(HIL);
+
+	RSP_UINT32 total_write_pages = 110 * 262144; //110G
+
+	while (1) {
+		if(i % 100 == 0)
+			printf("-");
+
+		HOST->HOST_gen_random_workload();
+		if (HOST->write_amount > total_write_pages)
+			break;
+		i++;
+	}
+
+	RSP_UINT32 *profile0 = VFL_0->profile;
+	RSP_UINT32 *profile1 = VFL_1->profile;
 }
 
 static void get_arg(int argc, char *argv []){
@@ -325,8 +364,8 @@ void main(int argc, char *argv[]){
 	
 	fp_in = fopen(trace_addr, "r");
 
-	run_FTL(fp_in);
-
+	//run_trace(fp_in);
+	run_workload();
 }
 
 

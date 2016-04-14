@@ -18,6 +18,10 @@ RSP_UINT32 dbg6;
 RSP_UINT32 dbglpn0;
 RSP_UINT32 dbglpn1;
 
+RSP_UINT32 dbg_log_start;
+RSP_UINT32 dbg_twrite_start;
+RSP_UINT32 dbg_remap_start;
+
 RSP_UINT32 dbg_iter1;
 RSP_UINT32 dbg_iter2;
 
@@ -163,7 +167,10 @@ namespace Hesper{
 		RSP_UINT32 channel, bank, plane, block = 0, loop, profile_iter;
 		RSPEraseOp RSP_erase_ops[PLANES_PER_BANK];
 		NUM_PBLK = NAND_NUM_CHANNELS * BANKS_PER_CHANNEL * BLKS_PER_PLANE * PLANES_PER_BANK;
-		NUM_LBLK = NUM_PBLK - OP_BLKS;
+		
+		NUM_LBLK = 56320; //55G 
+
+		//NUM_LBLK = NUM_PBLK - OP_BLKS;
 		NUM_CACHED_MAP = CMT_size / (BYTES_PER_SUPER_PAGE);
 
 		//VCOUNT = (RSP_UINT32*)rspmalloc(NUM_PBLK * sizeof_u32);
@@ -233,6 +240,9 @@ namespace Hesper{
 				NAND_bank_state[channel][bank].JN_todo_list.size = 0;
 				NAND_bank_state[channel][bank].RW_log_list.size = 0;
 				NAND_bank_state[channel][bank].data_list.size = 0;
+				
+				NAND_bank_state[channel][bank].remap_inbuff_cnt = 0;
+				
 				NAND_bank_state[channel][bank].map_start = false;
 				NAND_bank_state[channel][bank].meta_start = false;
 				block = 0;
@@ -755,7 +765,7 @@ namespace Hesper{
 				RSP_read_op.m_nLPN = lpn;
 				m_pVFLWrapper->INC_READPENDING();
 				m_pVFLWrapper->Issue(RSP_read_op);
-				m_pVFLWrapper->WAIT_READPENDING();
+				//m_pVFLWrapper->WAIT_READPENDING();
 
 
 				if(lpn >= RW_LOG_START_IN_PAGE)
@@ -772,7 +782,7 @@ namespace Hesper{
 		}
 		else
 		{
-			RSPOSAL::RSP_MemSet(BufferAddress, 0xFF, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
+			//RSPOSAL::RSP_MemSet(BufferAddress, 0xFF, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
 
 			if(lpn >= RW_LOG_START_IN_PAGE)
 				m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Null_read, 1);
@@ -810,12 +820,15 @@ namespace Hesper{
 		else
 			twrite_entry->remained = (RSP_UINT32)(twrite_entry->addr_start % NUM_FTL_CORE == THIS_CORE) + (twrite_entry->io_count) / NUM_FTL_CORE;
 
+		if(twrite_entry->remained == 0){
+			//It is the twrite who has only one request which is belong to other core.
+			insert_twrite_entry(twrite_entry, &free_twrite_list);
+			return;
+		}
+
 		//dbg
 		dbg_twrite_hdr_cnt++;
-		//dbg
-		if (twrite_entry->addr_start == 28830072 && twrite_entry->io_count == 48)
-			RSP_UINT32 err = 3;
-
+		
 		if (twrite_entry->addr_start / NUM_FTL_CORE >= RW_LOG_START_IN_PAGE){
 			//RW twrite
 			twrite_entry->epoch = epoch_number[SHRD_RW];
@@ -866,7 +879,16 @@ namespace Hesper{
 			RSP_UINT32 err = 3;
 
 		offset = tLPN * NUM_FTL_CORE + THIS_CORE - twrite_entry->addr_start;
-		RSP_ASSERT((tLPN * NUM_FTL_CORE + THIS_CORE >= twrite_entry->addr_start));
+		//RSP_ASSERT((tLPN * NUM_FTL_CORE + THIS_CORE >= twrite_entry->addr_start));
+		if(tLPN * NUM_FTL_CORE + THIS_CORE < twrite_entry->addr_start){
+			dbg1 = twrite_entry->addr_start;
+			dbg2 = RW_LOG_START_IN_PAGE;
+			dbg3 = tLPN;
+			dbg4 = THIS_CORE;
+			dbg_twrite_entry = (TWRITE_DBG_ENTRY *)twrite_entry;
+			RSP_ASSERT(0);
+		}
+		
 		RSP_ASSERT(twrite_entry->remained > 0);
 		
 		*oLPN = twrite_entry->o_addr[offset] / NUM_FTL_CORE;
@@ -958,7 +980,7 @@ namespace Hesper{
 		//dbg
 		dbg_remap_cnt++;
 
-		if (remap_entry->t_addr_start / NUM_FTL_CORE >= RW_LOG_START_IN_PAGE){
+		if (remap_entry->t_addr[0] / NUM_FTL_CORE >= RW_LOG_START_IN_PAGE){
 			remap_entry->epoch = epoch_number[SHRD_RW];
 			epoch_number[SHRD_RW] = (epoch_number[SHRD_RW] + 1) % MAX_EPOCH_NUMBER;
 			insert_remap_entry(remap_entry, &RW_remap_list);
@@ -966,7 +988,7 @@ namespace Hesper{
 			//do_remap(SHRD_RW);
 			__do_remap(SHRD_RW);
 		}
-		else if (remap_entry->t_addr_start / NUM_FTL_CORE >= JN_LOG_START_IN_PAGE){
+		else if (remap_entry->t_addr[0] / NUM_FTL_CORE >= JN_LOG_START_IN_PAGE){
 			remap_entry->epoch = epoch_number[SHRD_JN];
 			epoch_number[SHRD_JN] = (epoch_number[SHRD_JN] + 1) % MAX_EPOCH_NUMBER;
 			insert_remap_entry(remap_entry, &JN_remap_list);
@@ -974,8 +996,6 @@ namespace Hesper{
 			do_remap(SHRD_JN);
 		}
 		else{
-
-			dbg1 = remap_entry->t_addr_start;
 			dbg2 = RW_LOG_START_IN_PAGE;
 			dbgbuff = buff;
 			dbg_remap_entry = (REMAP_DBG_ENTRY *)remap_entry;
@@ -1055,11 +1075,17 @@ namespace Hesper{
 		for (RSP_UINT32 remap_cnt = 0; remap_cnt < entry->remap_count; remap_cnt++){
 			RSP_UINT32 vpn;
 			RSP_UINT32 old_vpn;
+			RSP_UINT8 channel;
+			RSP_UINT8 bank;
+			RSP_UINT32 bank_offset;
+			RSP_UINT16 superblk;
 
 			if (entry->t_addr[remap_cnt] % NUM_FTL_CORE != THIS_CORE)
 				continue;
 			if (entry->o_addr[remap_cnt] == VC_MAX)
 				continue;
+
+			//get vpn (t_addr) and old_vpn (o_addr)
 			if(REMAP_TYPE == SHRD_RW)
 			{
 				vpn = get_vpn(entry->t_addr[remap_cnt] / NUM_FTL_CORE, Prof_RW_remap);
@@ -1073,43 +1099,14 @@ namespace Hesper{
 				m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_entry, 1);
 			}
 
+			//set tLPN map as VC_MAX
 			if (REMAP_TYPE == SHRD_RW)
 				set_vpn(entry->t_addr[remap_cnt] / NUM_FTL_CORE, VC_MAX, Prof_RW_remap);
 			else
 				set_vpn(entry->t_addr[remap_cnt] / NUM_FTL_CORE, VC_MAX, Prof_JN_remap);
 
-
-			RSP_UINT8 channel = (RSP_UINT8) get_channel_from_vpn(vpn);
-			RSP_UINT8 bank = (RSP_UINT8) get_bank_from_vpn(vpn);
-			RSP_UINT32 bank_offset = get_vpn_offset_in_bank(vpn);
-			RSP_UINT16 superblk = (RSP_UINT16) get_super_block(bank_offset);
-
-			NAND_bank_state[channel][bank].block_list[superblk].remained_remap_cnt--;
-
-			if (NAND_bank_state[channel][bank].block_list[superblk].remained_remap_cnt == 0){
-				//should move blk group
-				if (REMAP_TYPE == SHRD_RW){
-					if (get_block(get_cur_write_vpn_RW(channel, bank)) == superblk)
-						if (get_cur_write_vpn_RW(channel, bank) % PAGES_PER_BLK != PAGES_PER_BLK - 1)
-							continue; //because the block is currently being written.
-					//move block group into data block now
-					del_blk_from_list(channel, bank, superblk, &NAND_bank_state[channel][bank].RW_log_list);
-					insert_bl_tail(channel, bank, superblk, &NAND_bank_state[channel][bank].data_list);
-				}
-				else if (REMAP_TYPE == SHRD_JN){
-					if (get_block(get_cur_write_vpn_JN(channel, bank)) == superblk)
-						if (get_cur_write_vpn_JN(channel, bank) % PAGES_PER_BLK != PAGES_PER_BLK - 1)
-							continue; //because the block is currently being written.
-					//move block group into todo-list and move to data block at jsuperblock write.
-					del_blk_from_list(channel, bank, superblk, &NAND_bank_state[channel][bank].JN_log_list);
-					insert_bl_tail(channel, bank, superblk, &NAND_bank_state[channel][bank].JN_todo_list);
-				}
-				else
-					RSP_ASSERT(0);
-			}
-
-			if (channel > RSP_NUM_CHANNEL){
-				//twrite data is not arrived yet
+			//VPN need to exist, if not, twrite data is not arrived yet
+			if (vpn == VC_MAX){
 				dbg1 = vpn;
 				dbg2 = remap_cnt;
 				dbg3 = entry->t_addr[remap_cnt];
@@ -1122,6 +1119,59 @@ namespace Hesper{
 				
 				RSP_ASSERT(0);
 			}
+
+			if(is_in_write_buffer(vpn)){
+				//twrite data is still in buff, 
+				RSP_UINT8 write_type;
+				RSP_UINT32 plane;
+				RSP_UINT32 buf_offset;
+				RSP_UINT32 temp_vpn = vpn;
+				
+				temp_vpn ^= (WRITE_BUFFER_BIT);
+				channel = temp_vpn / (BANKS_PER_CHANNEL * WRITE_TYPE_NUM * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+				temp_vpn %= (BANKS_PER_CHANNEL * WRITE_TYPE_NUM * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+				bank = temp_vpn / (WRITE_TYPE_NUM * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+				temp_vpn %= (WRITE_TYPE_NUM * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+				//when the data is remapped at buffer, we need to know the previous write_type
+				write_type = temp_vpn / (PLANES_PER_BANK * LPAGE_PER_PPAGE);
+				temp_vpn %= (PLANES_PER_BANK * LPAGE_PER_PPAGE);
+
+				plane = temp_vpn / LPAGE_PER_PPAGE;
+				buf_offset = temp_vpn % LPAGE_PER_PPAGE;
+				NAND_bank_state[channel][bank].writebuf_lpn[write_type][plane][buf_offset][0] = entry->o_addr[remap_cnt] / NUM_FTL_CORE;
+				
+				NAND_bank_state[channel][bank].remap_inbuff_cnt++;  //need to decrease the remained remap cnt at the write_page()
+			
+			}
+			else{
+				channel = (RSP_UINT8) get_channel_from_vpn(vpn);
+				bank = (RSP_UINT8) get_bank_from_vpn(vpn);
+				bank_offset = get_vpn_offset_in_bank(vpn);
+				superblk = (RSP_UINT16) get_super_block(bank_offset);
+
+				NAND_bank_state[channel][bank].block_list[superblk].remained_remap_cnt--;
+
+				if (NAND_bank_state[channel][bank].block_list[superblk].remained_remap_cnt == 0){
+					//should move blk group
+					if (REMAP_TYPE == SHRD_RW){
+						if((get_block(get_cur_write_vpn_RW(channel, bank)) != superblk)||(get_cur_write_vpn_RW(channel, bank) % PAGES_PER_BLK == PAGES_PER_BLK - 1)){
+							del_blk_from_list(channel, bank, superblk, &NAND_bank_state[channel][bank].RW_log_list);
+							insert_bl_tail(channel, bank, superblk, &NAND_bank_state[channel][bank].data_list);
+						}
+						//move block group into data block now
+						
+					}
+					else if (REMAP_TYPE == SHRD_JN){
+						if((get_block(get_cur_write_vpn_JN(channel, bank)) != superblk)||(get_cur_write_vpn_JN(channel, bank) % PAGES_PER_BLK == PAGES_PER_BLK - 1)){
+							del_blk_from_list(channel, bank, superblk, &NAND_bank_state[channel][bank].JN_log_list);
+							insert_bl_tail(channel, bank, superblk, &NAND_bank_state[channel][bank].data_list);
+						}
+					}
+					else
+						RSP_ASSERT(0);
+				}
+			}
+
 			if (old_vpn != VC_MAX){
 
 				RSP_UINT8 old_channel, old_bank;
@@ -1225,7 +1275,21 @@ namespace Hesper{
 		RSP_BOOL DO_REMAP_FLAG = false;
 		TWRITE_HDR_ENTRY *twrite_entry = NULL;
 
+		if(LPN[0] >= RW_LOG_START_IN_PAGE && LPN[1] < RW_LOG_START_IN_PAGE){
+			RSP_ASSERT(0);
+		}
+
+		
+		else if(LPN[1] >= RW_LOG_START_IN_PAGE && LPN[0] < RW_LOG_START_IN_PAGE){
+			if (LPN[1] < RSP_INVALID_LPN)
+				RSP_ASSERT(0);
+		}
+		
 		dbg_rspwrite_cnt++;
+		dbg_log_start = RW_LOG_START_IN_PAGE;
+		dbg_twrite_start = TWRITE_CMD_IN_PAGE;
+		dbg_remap_start = REMAP_CMD_IN_PAGE;
+
 		
 		for (loop = 0; loop < LPAGE_PER_PPAGE; loop++)
 		{
@@ -1269,6 +1333,7 @@ namespace Hesper{
 						twrite_entry->remained--;
 					}
 				}
+				/*
 				if (loop){
 					if (write_type == SHRD_RW){
 						ret = write_page(LPN[loop], loop ? (SectorBitmap & 0xff00) : (SectorBitmap & 0xff), BufferAddress, oLPN, write_type % WRITE_TYPE_NUM);
@@ -1305,6 +1370,11 @@ namespace Hesper{
 						buff_cnt++;
 						
 					}
+				}
+				*/
+				ret = write_page(LPN[loop], loop ? (SectorBitmap & 0xff00) : (SectorBitmap & 0xff), BufferAddress, oLPN, write_type % WRITE_TYPE_NUM);
+				if(!ret){
+					buff_cnt++;
 				}
 				
 			
@@ -1351,11 +1421,6 @@ namespace Hesper{
 		RSP_SECTOR_BITMAP RMW_bitmap = 0;
 		channel = get_channel(lpn);
 		bank = get_bank(lpn);
-
-		//dbg
-		if (lpn == 17537)
-			RSP_UINT32 err = 3;
-		//dbg end
 
 		//Padding Write
 		//need to set vpn to VC_MAX (because the tLPN has no more corresponding VPN)
@@ -1482,7 +1547,7 @@ namespace Hesper{
 
 				set_vcount(old_channel, old_bank, block, get_vcount(old_channel, old_bank, block) - 1);
 
-				//when the twrite data is overwritten before remap, it must be 
+				//when the twrite data is overwritten before remap, it will not remapped, so decrease remained remap cnt
 				if (WRITE_TYPE != SHRD_SW){
 					NAND_bank_state[old_channel][old_bank].block_list[block].remained_remap_cnt--;
 					RSP_ASSERT(NAND_bank_state[old_channel][old_bank].block_list[block].remained_remap_cnt >= 0);
@@ -1626,13 +1691,15 @@ namespace Hesper{
 				}
 
 				m_pVFLWrapper->INC_PROGRAMPENDING();
+				m_pVFLWrapper->Issue(RSP_write_ops);
+				/*
 				if (WRITE_TYPE == SHRD_RW)
 					m_pVFLWrapper->Issue(RSP_write_ops);
 				else{
 					m_pVFLWrapper->MetaIssue(RSP_write_ops);
 					//m_pVFLWrapper->WAIT_PROGRAMPENDING();
 				}
-
+				*/
 				//m_pVFLWrapper->WAIT_PROGRAMPENDING();
 
 				block = new_vpn / PAGES_PER_BLK;
@@ -1652,6 +1719,22 @@ namespace Hesper{
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_write, PLANES_PER_BANK * LPAGE_PER_PPAGE);
 				if (WRITE_TYPE != SHRD_SW){
 					NAND_bank_state[channel][bank].block_list[block].remained_remap_cnt += PLANES_PER_BANK * LPAGE_PER_PPAGE;
+
+					NAND_bank_state[channel][bank].block_list[block].remained_remap_cnt -= NAND_bank_state[channel][bank].remap_inbuff_cnt;
+					NAND_bank_state[channel][bank].remap_inbuff_cnt = 0;
+
+					if (NAND_bank_state[channel][bank].block_list[block].remained_remap_cnt == 0){
+						//should move blk group
+						if (WRITE_TYPE == SHRD_RW){
+							if((get_block(get_cur_write_vpn_RW(channel, bank)) != block)||(get_cur_write_vpn_RW(channel, bank) % PAGES_PER_BLK == PAGES_PER_BLK - 1)){
+								del_blk_from_list(channel, bank, block, &NAND_bank_state[channel][bank].RW_log_list);
+								insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].data_list);
+							}
+						}
+						else
+							RSP_ASSERT(0);
+					}
+					
 				}
 			}
 
@@ -2687,11 +2770,15 @@ namespace Hesper{
 
 		}
 		m_pVFLWrapper->INC_PROGRAMPENDING();
+		
+		m_pVFLWrapper->Issue(RSP_write_ops);
+		/*
 		if (WRITE_TYPE == SHRD_RW)
 			m_pVFLWrapper->Issue(RSP_write_ops);
 		else{
 			m_pVFLWrapper->MetaIssue(RSP_write_ops);
 		}
+		*/
 		//m_pVFLWrapper->Issue(RSP_write_ops);
 		m_pVFLWrapper->WAIT_PROGRAMPENDING();
 
