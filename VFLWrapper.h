@@ -2,6 +2,7 @@
 #define __VFLWRAPPER_H__
 
 #include "RSP_Header.h"
+#include <stdio.h>
 
 typedef struct ProgramOp
 {
@@ -41,6 +42,10 @@ class VFLWrapper
 {
 	public:
 
+#define VFL_BLOCK_DATA_SIZE (1048576)
+#define VFL_BLOCK_OOB_SIZE (2048)
+
+
 		char dir[1024];
 		char temp_dir[1024];
 
@@ -49,6 +54,9 @@ class VFLWrapper
 		RSP_UINT32 profile[128];
 
 		RSP_UINT32 CORE_ID;
+
+		FILE *fp_data[2];
+		FILE *fp_oob[2];
 
 		void *pHILWrapper;
 

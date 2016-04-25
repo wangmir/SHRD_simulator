@@ -319,7 +319,7 @@ static void run_workload() {
 
 	SHRD_host *HOST = new SHRD_host(HIL);
 
-	RSP_UINT32 total_write_pages = 110 * 262144; //110G
+	RSP_UINT32 total_write_pages = 220 * 262144; //110G
 
 	while (1) {
 		if(i % 100 == 0)

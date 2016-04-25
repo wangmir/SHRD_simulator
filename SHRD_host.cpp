@@ -49,7 +49,9 @@ void SHRD_host::do_twrite(RSP_UINT32 max_packed_rw) {
 	twrite_header->t_addr_start = log_addr + SHRD_RW_LOG_START_IN_PAGE;
 	
 	while (1) {
-		LPN = rand() % (SHRD_LOG_START_IN_PAGE - 4096);
+		//LPN = rand() % (SHRD_LOG_START_IN_PAGE - 4096);
+		LPN = (rand() * rand()) % (2 * 1024 * 256);
+		
 		page_count = 1; //it can be varied.
 		req_pages += page_count;
 

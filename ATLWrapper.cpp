@@ -282,7 +282,7 @@ namespace Hesper{
 				NAND_bank_state[channel][bank].cur_meta_vpn = 0;
 
 				NAND_bank_state[channel][bank].cpybuf_addr = (RSP_UINT32*)rspmalloc(BYTES_PER_SUPER_PAGE);
-				NAND_bank_state[channel][bank].GCbuf_addr = (RSP_UINT32*)rspmalloc(BYTES_PER_SUPER_PAGE);
+				NAND_bank_state[channel][bank].GCbuf_addr = (RSP_UINT32*)rspmalloc(BYTES_PER_SUPER_PAGE + BYTES_PER_SECTOR * SECTORS_PER_LPN);
 				NAND_bank_state[channel][bank].GCbuf_index = 0;
 
 				//Meta blk
@@ -1422,21 +1422,7 @@ namespace Hesper{
 		channel = get_channel(lpn);
 		bank = get_bank(lpn);
 
-		//Padding Write
-		//need to set vpn to VC_MAX (because the tLPN has no more corresponding VPN)
-		if (WRITE_TYPE == SHRD_RW && oLPN >= RSP_INVALID_LPN){
-			set_vpn(lpn, VC_MAX, Prof_RW);
-			return false;
-		}
-
-		//don't need, if valid we need to handle it in here
-		/*if(WRITE_TYPE != SHRD_SW)
-			old_vpn = VC_MAX;*/
-
-
-		else
-			old_vpn = get_vpn(lpn, Prof_SW);
-		
+		old_vpn = get_vpn(lpn, Prof_SW);
 
 		RSP_ASSERT(lpn < TWRITE_CMD_IN_PAGE);
 
@@ -1551,13 +1537,34 @@ namespace Hesper{
 				if (WRITE_TYPE != SHRD_SW){
 					NAND_bank_state[old_channel][old_bank].block_list[block].remained_remap_cnt--;
 					RSP_ASSERT(NAND_bank_state[old_channel][old_bank].block_list[block].remained_remap_cnt >= 0);
+
+					if (NAND_bank_state[old_channel][old_bank].block_list[block].remained_remap_cnt == 0) {
+						//should move blk group
+						if (WRITE_TYPE == SHRD_RW) {
+							if ((get_block(get_cur_write_vpn_RW(old_channel, old_bank)) != block) || (get_cur_write_vpn_RW(old_channel, old_bank) % PAGES_PER_BLK == PAGES_PER_BLK - 1)) {
+								del_blk_from_list(old_channel, old_bank, block, &NAND_bank_state[old_channel][old_bank].RW_log_list);
+								insert_bl_tail(old_channel, old_bank, block, &NAND_bank_state[old_channel][old_bank].data_list);
+							}
+							//move block group into data block now
+						}
+						else
+							RSP_ASSERT(0);
+					}
 				}
+
 			}
 			else
 			{
 				block = 0;
 			}
 			RSP_ASSERT(block < BLKS_PER_PLANE);
+
+			//Padding Write
+			//need to set vpn to VC_MAX (because the tLPN has no more corresponding VPN)
+			if (WRITE_TYPE == SHRD_RW && oLPN >= RSP_INVALID_LPN) {
+				set_vpn(lpn, VC_MAX, Prof_RW);
+				return false;
+			}
 
 			//buffer bitmap:: 00 00 00 00
 			//write_buf_idx:: 3  2  1  0
@@ -2226,13 +2233,14 @@ namespace Hesper{
 						RSP_read_op.m_nVPN = generate_vpn(channel, bank, RSP_read_op.nBlock, plane, RSP_read_op.nPage, high_low);
 
 						m_pVFLWrapper->INC_READPENDING();
-
 						m_pVFLWrapper->MetaIssue(RSP_read_op);
-
 						m_pVFLWrapper->WAIT_READPENDING();
-
 						m_pVFLWrapper->_GetSpareData(spare_area);
 						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_read, 1);
+					}
+					else {
+
+
 					}
 
 					//spare_lpn = spare_area[high_low * LPAGE_PER_PPAGE];
@@ -2399,18 +2407,6 @@ namespace Hesper{
 						RSP_UINT32 spare_area[LPAGE_PER_PPAGE * NUM_SPARE_LPN];
 						RSP_UINT32 spare_lpn, read_vpn;
 
-						/*if (high_low_iter){
-							RSP_read_op.pData = (RSP_UINT32 *)sub_addr(
-								add_addr(
-								NAND_bank_state[channel][bank].GCbuf_addr,
-								NAND_bank_state[channel][bank].GCbuf_index * (RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE)),
-								RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
-						}
-						else{
-							RSP_read_op.pData = (RSP_UINT32 *)add_addr(
-								NAND_bank_state[channel][bank].GCbuf_addr,
-								NAND_bank_state[channel][bank].GCbuf_index * (RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE));
-						}*/
 						if (!high_low_iter){
 							RSP_read_op.pData = (RSP_UINT32 *)add_addr(
 								NAND_bank_state[channel][bank].GCbuf_addr,
@@ -2490,9 +2486,9 @@ namespace Hesper{
 								m_pVFLWrapper->MetaIssue(RSP_write_ops);
 								m_pVFLWrapper->WAIT_PROGRAMPENDING();
 
-								NAND_bank_state[channel][bank].GCbuf_index = 0;
 								set_vcount(channel, bank, super_blk, get_vcount(channel, bank, super_blk) + PLANES_PER_BANK * LPAGE_PER_PPAGE);
 								m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_write, PLANES_PER_BANK * LPAGE_PER_PPAGE);
+								NAND_bank_state[channel][bank].GCbuf_index = 0;
 							}
 							cpy_cnt++;
 						}

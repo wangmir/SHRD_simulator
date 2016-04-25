@@ -81,8 +81,8 @@ public:
 	RSP_UINT32 rw_log_start_idx;
 	RSP_UINT32 rw_log_new_idx;
 
-	RSP_UINT32 remap_threshold = SHRD_RW_REMAP_THRESHOLD_IN_PAGE;
-	RSP_UINT32 remap_size = SHRD_MAX_REMAP_SIZE_IN_PAGE;
+	RSP_UINT32 remap_threshold = 20480;
+	RSP_UINT32 remap_size = 16384;
 
 	RSP_UINT32 header_entry_num = 0;
 	RSP_UINT32 remap_entry_num = 0;
