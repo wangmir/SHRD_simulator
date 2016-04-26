@@ -1,55 +1,60 @@
 #ifndef _FTL_H
 #define _FTL_H
 
+#include <stdio.h>
+
 #include "RSP_Header.h"
 #include "RSP_OSAL.h"
 
 #include "VFLWrapper.h"
 
-#include <stdio.h>
+namespace Hesper{
 
-	//define
+	enum ReadState{
+		ReadWriteBuffer,
+		ReadError,
+		ReadNand,
+	};
+
+
 #define sizeof_u32 4
 #define sizeof_u64 8
-	
+
 #define KB (1024)
 #define MB (1024 * KB)
-	
-		//FTL CORE
+
+	//FTL CORE
 #define NUM_FTL_CORE 2
 #define THIS_CORE (_COREID_ - 1) //should be changed into variable
-	
-		//RSP_MEM_API
+
+	//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
 #define rspsmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::SRAM, a)
-		//#define rspmalloc(a) malloc(a)
-	
+	//#define rspmalloc(a) malloc(a)
+
 #define BYTES_PER_SECTOR RSP_BYTE_PER_SECTOR
 #define SECTORS_PER_LPN RSP_SECTOR_PER_LPN
 #define SECTORS_PER_PAGE RSP_SECTOR_PER_PAGE
 #define LPAGE_PER_PPAGE 2
 #define PAGES_PER_BLK RSP_PAGE_PER_BLOCK
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
-	
-	//test
-#define BLKS_PER_PLANE (96)
-//#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
+//#define BLKS_PER_PLANE (64 + 64)
+#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
 #define BANKS_PER_CHANNEL RSP_NUM_BANK
 #define	NAND_NUM_CHANNELS RSP_NUM_CHANNEL
-		//static RSP_UINT32 OP_BLKS = 1024;
-		//for test
-#define NUM_LOGICAL_BLOCK ((110 / NUM_FTL_CORE) * 1024)
+	//static RSP_UINT32 OP_BLKS = 1024;
+	//for test
 
-		static RSP_UINT32 OP_BLKS = 7264;
-		static RSP_UINT32 NUM_LBLK;
-		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 4 * MB; //2MB
-	
-		//Mapping data
-	
+	static RSP_UINT32 OP_BLKS = 7264;
+	static RSP_UINT32 NUM_LBLK;
+	static RSP_UINT32 NUM_PBLK;
+	static RSP_UINT32 CMT_size = 16 * MB; //2MB
+
+	//Mapping data
+
 #define NUM_MAP_ENTRY (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE / (MAP_ENTRY_SIZE / sizeof_u32))
 #define NUM_MAP_ENTRY_BLK ((NUM_MAP_ENTRY + PAGES_PER_BLK - 1) / PAGES_PER_BLK)
 #define MAP_ENTRY_BLK_PER_BANK ((NUM_MAP_ENTRY_BLK + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) + 3)
@@ -57,152 +62,139 @@
 #define MAP_ENTRY_SIZE (BYTES_PER_SUPER_PAGE)
 #define NUM_MAP_ENTRY_PER_BANK ((NUM_MAP_ENTRY + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS))
 #define NUM_PAGES_PER_MAP (MAP_ENTRY_SIZE / sizeof_u32)
-	
+
 #define TRUE 1
 #define FALSE 0
-	
+
 #define OP_BLKS_PER_BANK OP_BLKS / (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)
 #define PAGES_PER_BANK (PAGES_PER_BLK * BLKS_PER_PLANE * PLANES_PER_BANK)
-	
-		// Logical area layout
-		// |------user data-------|-SUPERBLKPAGE-|---JN_LOG---|---RW_LOG---|--SP_CMD--|
-		// REMARKS:: SP_CMD is not a portion of LBLK
-	
-		//VPN layout
-		// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
-	
+
+	// Logical area layout
+	// |------user data-------|-SUPERBLKPAGE-|---JN_LOG---|---RW_LOG---|--SP_CMD--|
+	// REMARKS:: SP_CMD is not a portion of LBLK
+
+	//VPN layout
+	// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
+
 #define RW_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define RW_LOG_START_IN_PAGE (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE - RW_LOG_SIZE_IN_PAGE)
 #define JN_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define JN_LOG_START_IN_PAGE RW_LOG_START_IN_PAGE - JN_LOG_SIZE_IN_PAGE
-	
+
 #define JN_SUPERBLK_PAGE_IDX JN_LOG_START_IN_PAGE - 1	//first page in the JN log is super block
-		//JN block group should be switched when the super block is written.
-	
+	//JN block group should be switched when the super block is written.
+
 #define NUM_MAX_TWRITE (32)
 #define NUM_MAX_REMAP (32)
 #define NUM_MAX_TWRITE_ENTRY (128)
 #define NUM_MAX_REMAP_ENTRY  (511)
-	
+
 #define TWRITE_CMD_IN_PAGE  (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE)
 #define REMAP_CMD_IN_PAGE (TWRITE_CMD_IN_PAGE + NUM_MAX_TWRITE) //# of NCQ
 #define CONFIRM_READ_CMD_IN_PAGE (REMAP_CMD_IN_PAGE + NUM_MAX_REMAP)
-	
-	
+
+
 #define NUM_META_BLKS 1
 #define NUM_SPARE_LPN 2
-	
-		/*
-			it is different from the original meaning of o_addr and t_addr,
-			because of the functional simplicity, REQ_LPN means requested logical address,
-			and REMAP_LPN means need-to-remapped logical address.
-			Thus, when the twrite is coming, T_addr will be written in the REQ_LPN,
-			and also when the sequential write is coming, o_addr will be written in the REQ_LPN.
-			*/
+
+	/*
+		it is different from the original meaning of o_addr and t_addr,
+		because of the functional simplicity, REQ_LPN means requested logical address,
+		and REMAP_LPN means need-to-remapped logical address.
+		Thus, when the twrite is coming, T_addr will be written in the REQ_LPN,
+		and also when the sequential write is coming, o_addr will be written in the REQ_LPN.
+		*/
 #define REQ_LPN 0     
 #define REMAP_LPN 1
+//Profile data
+enum{
+//SW
+	Prof_SW_write = 0,
+	Prof_SW_read,
+	Prof_SW_Null_read,
+	Prof_SW_buf_read,
+	Prof_SW_modify_read,
+	Prof_SW_modify_buf_write,
+	Prof_SW_map_load,
+	Prof_SW_map_log,
+	Prof_SW_block_alloc,
+	
+//RW
+	Prof_RW_write,
+	Prof_RW_read,
+	Prof_RW_Null_read,
+	Prof_RW_buf_read,
+	Prof_RW_modify_read,
+	Prof_RW_modify_buf_write,
+	Prof_RW_map_load,
+	Prof_RW_map_log,
+	Prof_RW_block_alloc,
+	Prof_RW_Remap_cnt,
+	Prof_RW_Remap_entry,
+	Prof_RW_Remap_map_load,
+	Prof_RW_Remap_map_log,
+	Prof_RW_twrite_cnt,
+	
+//JN
+	Prof_JN_write,
+	Prof_JN_read,
+	Prof_JN_Null_read,
+	Prof_JN_buf_read,
+	Prof_JN_modify_read,
+	Prof_JN_modify_buf_write,
+	Prof_JN_map_load,
+	Prof_JN_map_log,
+	Prof_JN_block_alloc,
+	Prof_JN_Remap_cnt,
+	Prof_JN_Remap_entry,
+	Prof_JN_Remap_map_load,
+	Prof_JN_Remap_map_log,
+	Prof_JN_twrite_cnt,
 
-	//write buffer layout
-	//  |-1-|---------|-channel--|--bank---|--buf type---|--plane--|--buf offset--|
-	//TODO:: At the performance optimizing session, we need to make all of multiply and divide function into shift operation.
-	//At this point, we need to change WRITE_TYPE_NUM into WRITE_TYPE_BITS 2, and pluse WRITE_BUFFER_BIT.
-#define WRITE_TYPE_NUM 3
+//Intra_GC
+	Prof_IntraGC_num,
+	Prof_IntraGC_write,
+	Prof_IntraGC_read,
+	Prof_IntraGC_map_load,
+	Prof_IntraGC_map_log,
+	Prof_IntraGC_erase,
 
-enum ReadState{
-		ReadWriteBuffer,
-		ReadError,
-		ReadNand,
-	};
+//Inter_GC
+	Prof_InterGC_num,
+	Prof_InterGC_write,
+	Prof_InterGC_read,
+	Prof_InterGC_map_load,
+	Prof_InterGC_map_log,
+	Prof_InterGC_erase,
+	
+//Map_manage	
+	Prof_map_hit,
+	Prof_map_miss,
+	Prof_map_erase,
 
-	//Profile data
-	enum{
-	//SW
-		Prof_SW_write = 0,
-		Prof_SW_read,
-		Prof_SW_Null_read,
-		Prof_SW_buf_read,
-		Prof_SW_modify_read,
-		Prof_SW_modify_buf_write,
-		Prof_SW_map_load,
-		Prof_SW_map_log,
-		Prof_SW_block_alloc,
-		
-	//RW
-		Prof_RW_write,
-		Prof_RW_read,
-		Prof_RW_Null_read,
-		Prof_RW_buf_read,
-		Prof_RW_modify_read,
-		Prof_RW_modify_buf_write,
-		Prof_RW_map_load,
-		Prof_RW_map_log,
-		Prof_RW_block_alloc,
-		Prof_RW_Remap_cnt,
-		Prof_RW_Remap_entry,
-		Prof_RW_Remap_map_load,
-		Prof_RW_Remap_map_log,
-		Prof_RW_twrite_cnt,
-		
-	//JN
-		Prof_JN_write,
-		Prof_JN_read,
-		Prof_JN_Null_read,
-		Prof_JN_buf_read,
-		Prof_JN_modify_read,
-		Prof_JN_modify_buf_write,
-		Prof_JN_map_load,
-		Prof_JN_map_log,
-		Prof_JN_block_alloc,
-		Prof_JN_Remap_cnt,
-		Prof_JN_Remap_entry,
-		Prof_JN_Remap_map_load,
-		Prof_JN_Remap_map_log,
-		Prof_JN_twrite_cnt,
+//Flush
+	Prof_num_flush,
+	Prof_meta_flush,
+	Prof_meta_erase,
+	Prof_map_flush,
+	Prof_SW_flush,
+	Prof_RW_flush,
+	Prof_JN_flush,
 
-	//Intra_GC
-		Prof_IntraGC_num,
-		Prof_IntraGC_write,
-		Prof_IntraGC_read,
-		Prof_IntraGC_map_load,
-		Prof_IntraGC_map_log,
-		Prof_IntraGC_erase,
-
-	//Inter_GC
-		Prof_InterGC_num,
-		Prof_InterGC_write,
-		Prof_InterGC_read,
-		Prof_InterGC_map_load,
-		Prof_InterGC_map_log,
-		Prof_InterGC_erase,
-		
-	//Map_manage	
-		Prof_map_hit,
-		Prof_map_miss,
-		Prof_map_erase,
-
-	//Flush
-		Prof_num_flush,
-		Prof_meta_flush,
-		Prof_meta_erase,
-		Prof_map_flush,
-		Prof_SW_flush,
-		Prof_RW_flush,
-		Prof_JN_flush,
-
-	//ETC	
-		Prof_Init_erase,
-		Prof_total_num,
-		
-	};
-	enum{
-		Prof_SW = 0,
-		Prof_RW,
-		Prof_JN,
-		Prof_JN_remap,
-		Prof_RW_remap,
-		Prof_IntraGC,
-		Prof_InterGC,
-	};
+//ETC	
+	Prof_Init_erase,
+	Prof_total_num,
+	
+};
+enum{
+	Prof_SW = 0,
+	Prof_RW,
+	Prof_JN,
+	Prof_JN_remap,
+	Prof_RW_remap,
+	Prof_IntraGC,
+	Prof_InterGC,
+};
 	struct block_struct{
 
 		block_struct* next;
@@ -217,6 +209,13 @@ enum ReadState{
 		RSP_UINT32 size;
 		block_struct* head;
 	};
+
+
+	//write buffer layout
+	//  |-1-|---------|-channel--|--bank---|--buf type---|--plane--|--buf offset--|
+	//TODO:: At the performance optimizing session, we need to make all of multiply and divide function into shift operation.
+	//At this point, we need to change WRITE_TYPE_NUM into WRITE_TYPE_BITS 2, and pluse WRITE_BUFFER_BIT.
+#define WRITE_TYPE_NUM 3
 
 	enum WRITE_TYPE{
 		SHRD_SW,
@@ -233,6 +232,7 @@ enum ReadState{
 		RSP_UINT32 cur_write_vpn_JN;
 		RSP_UINT32 cur_write_vpn_RW;
 
+		RSP_UINT32 num_free_blk;
 		RSP_UINT32 cur_map_vpn;
 		RSP_UINT32 MAP_GC_BLK;
 		RSP_UINT32 map_free_blk;
@@ -310,13 +310,9 @@ enum ReadState{
 		RSP_INVALID_LPN,
 		RSP_INVALID_LPN
 	};
-	
-namespace Hesper{
 
 	
-
-	
-#define RSP_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT!!");while(1);}
+#define RSP_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT");while(1);}
 
 	class ATLWrapper
 	{
@@ -364,8 +360,6 @@ namespace Hesper{
 
 #define MAX_EPOCH_NUMBER 65536
 		RSP_UINT32 epoch_number[WRITE_TYPE_NUM];
-
-		RSP_UINT32 after_gc = 0;
 
 		//for simulator
 		RSP_UINT32 _COREID_;
@@ -444,7 +438,7 @@ namespace Hesper{
 		RSP_VOID bank_meta_flush(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_VOID flush_bank(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_VOID write_buffer_flush(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT8 WRITE_TYPE);
-		RSP_VOID test_NAND_list();
+
 		RSP_UINT32 map_vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_UINT32 vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 	};

@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <direct.h>
+#include <stdlib.h>
 
 #include "VFLWrapper.h"
 #include "ATLWrapper.h"
@@ -47,24 +48,17 @@ bool VFLWrapper::Issue(RSPReadOp RSPOp){
 	seek += RSPOp.nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 	seek += RSPOp.nBlock;
 
-	fseek(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE, SEEK_SET);
-	fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE, SEEK_SET);
-
-	//superpage aligned block file
-	//offset means lpn (4kb) offset on the superblock (plane * block)
 	RSP_UINT32 offset = RSPOp.nPage * LPAGE_PER_PPAGE;
 
 	if (RSPOp.bmpTargetSector == 0xff00){
 		offset++;
 	}
 
-	//memset(RSPOp.pData, 0xff, 4096);
-
-	fseek(fp_data[CORE_ID], offset * RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, SEEK_CUR);
+	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_SECTOR_PER_LPN * RSP_BYTE_PER_SECTOR, SEEK_SET);
 	fread((char *)RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, 1, fp_data[CORE_ID]);
 
 	//2 means o_addr and t_addr pair on the spare area
-	fseek(fp_oob[CORE_ID], offset * 2 * sizeof(RSP_UINT32), SEEK_CUR);
+	fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * sizeof(RSP_UINT32), SEEK_SET);
 	
 	if (RSPOp.bmpTargetSector == 0xff){
 		fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2, 1, fp_oob[CORE_ID]);
@@ -86,29 +80,24 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 		if (RSPOp[plane].pData == NULL)
 			continue;
 
-		RSP_UINT32 seek = 0;
+		RSP_UINT64 seek = 0;
 
 		seek += RSPOp[plane].nChannel * (BANKS_PER_CHANNEL * PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBlock;
 
-		fseek(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE, SEEK_SET);
-		fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE, SEEK_SET);
-
-		//superpage aligned block file
-		//offset means lpn (4kb) offset on the superblock (plane * block)
 		RSP_UINT32 offset = RSPOp[plane].nPage;
 
-		fseek(fp_data[CORE_ID], offset * RSP_BYTES_PER_PAGE, SEEK_CUR);
+		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
 
-		//2 means o_addr and t_addr pair on the spare area
-		fseek(fp_oob[CORE_ID], offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_CUR);
+		_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
 		fwrite((char *) RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
 
 		HIL->HIL_BuffFree(RSPOp[plane].pData);
 
 	}
+
 	return true;
 
 }
@@ -130,27 +119,22 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 		if (RSPOp[plane].pData == NULL)
 			continue;
 
-		RSP_UINT32 seek = 0;
+		RSP_UINT64 seek = 0;
 
 		seek += RSPOp[plane].nChannel * (BANKS_PER_CHANNEL * PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBlock;
 
-		fseek(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE, SEEK_SET);
-		fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE, SEEK_SET);
-
-		//superpage aligned block file
-		//offset means lpn (4kb) offset on the superblock (plane * block)
 		RSP_UINT32 offset = RSPOp[plane].nPage;
 
-		fseek(fp_data[CORE_ID], offset * RSP_BYTES_PER_PAGE, SEEK_CUR);
+		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
 
-		//2 means o_addr and t_addr pair on the spare area
-		fseek(fp_oob[CORE_ID], offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_CUR);
+		_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
 		fwrite((char *)RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
 
 	}
+
 	return true;
 
 }
@@ -158,29 +142,19 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 //METAISSUE read performs with 8KB page (not 4KB LPAGE)
 bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
 
-	RSP_UINT32 seek = 0;
+	RSP_UINT64 seek = 0;
 
 	seek += RSPOp.nChannel * (BANKS_PER_CHANNEL * PLANES_PER_BANK * BLKS_PER_PLANE);
 	seek += RSPOp.nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 	seek += RSPOp.nBlock;
 
-	fseek(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE, SEEK_SET);
-	fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE, SEEK_SET);
-
-	//superpage aligned block file
-	//offset means lpn (4kb) offset on the superblock (plane * block)
+	
 	RSP_UINT32 offset = RSPOp.nPage;
 
-	//memset(RSPOp.pData, 0xff, 4096);
-
-	fseek(fp_data[CORE_ID], offset * RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, SEEK_CUR);
+	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 	fread((char *) RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data[CORE_ID]);
-
-	//2 means o_addr and t_addr pair on the spare area
-	fseek(fp_oob[CORE_ID], offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_CUR);
+	_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
 	fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
-	
-
 
 	return true;
 }
@@ -233,4 +207,32 @@ void VFLWrapper::INC_READPENDING(){
 
 void VFLWrapper::INC_ERASEPENDING(){
 
+}
+
+bool VFLWrapper::test() {
+	RSP_UINT64 seek = 0;
+	RSP_UINT32 ret = 0;
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(8192);
+
+	seek = 2274;
+
+
+	RSP_UINT32 offset = 15;
+	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
+	ret = fread((char *)buff, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data[CORE_ID]);
+
+	if (*buff != 0x88888888)
+		printf("!!");
+
+	memset(buff, 0x00, 8192);
+
+	offset = 30;
+	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_SECTOR_PER_LPN * RSP_BYTE_PER_SECTOR, SEEK_SET);
+	ret = fread((char *)buff, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, 1, fp_data[CORE_ID]);
+
+	if (*buff != 0x88888888)
+		printf("!!");
+
+	free(buff);
+	return true;
 }

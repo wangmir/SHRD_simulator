@@ -58,6 +58,8 @@ class VFLWrapper
 		FILE *fp_data[2];
 		FILE *fp_oob[2];
 
+		RSP_UINT32 test_bit = 0;
+
 		void *pHILWrapper;
 
 		VFLWrapper(char *Working_dir, RSP_UINT32 CORE);
@@ -75,6 +77,8 @@ class VFLWrapper
 		bool Issue(RSPProgramOp RSPOp[4]);
 		bool Issue(RSPReadOp RSPOp);
 		bool Issue(RSPEraseOp RSPOp[4]);
+
+		bool test();
 
 		bool MetaIssue(RSPProgramOp RSPOp[4]);
 		bool MetaIssue(RSPReadOp RSPOp);

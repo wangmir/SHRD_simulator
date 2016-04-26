@@ -76,6 +76,10 @@ public:
 
 #define RANDOM_SEED 0x8fff
 
+#define LPN_RANGE (4 * 1024 * 256)
+
+#define HOST_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT!!");while(1);}
+
 	HILWrapper *HIL;
 
 	RSP_UINT32 rw_log_start_idx;
@@ -102,6 +106,9 @@ public:
 	int HOST_gen_random_workload();
 
 	//for realitic host simulation
+
+	void HOST_verify_random_workload();
+
 	RSP_BOOL HOST_Write(RSP_UINT32 SectAddr, RSP_UINT32 SectCount, RSP_UINT32 *buff);
 	RSP_BOOL HOST_Read(RSP_UINT32 SectAddr, RSP_UINT32 SectCount, RSP_UINT32 *buff);
 	//RSP_BOOL HOST_Flush();

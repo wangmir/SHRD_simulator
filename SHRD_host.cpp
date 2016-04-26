@@ -49,9 +49,12 @@ void SHRD_host::do_twrite(RSP_UINT32 max_packed_rw) {
 	twrite_header->t_addr_start = log_addr + SHRD_RW_LOG_START_IN_PAGE;
 	
 	while (1) {
-		//LPN = rand() % (SHRD_LOG_START_IN_PAGE - 4096);
-		LPN = (rand() * rand()) % (2 * 1024 * 256);
-		
+
+		LPN = (rand() * rand()) % LPN_RANGE;
+
+		if (LPN == 8)
+			printf("!!");
+
 		page_count = 1; //it can be varied.
 		req_pages += page_count;
 
@@ -108,6 +111,27 @@ void SHRD_host::do_twrite(RSP_UINT32 max_packed_rw) {
 		memset(buff, 0xff, 4096);
 		if (twrite_header->o_addr[i] == RSP_INVALID_LPN)
 			memset(buff, 0xaa, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 0)
+			memset(buff, 0xff, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 1)
+			memset(buff, 0x11, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 2)
+			memset(buff, 0x22, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 3)
+			memset(buff, 0x33, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 4)
+			memset(buff, 0x44, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 5)
+			memset(buff, 0x55, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 6)
+			memset(buff, 0x66, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 7)
+			memset(buff, 0x77, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 8)
+			memset(buff, 0x88, 4096);
+		else if (twrite_header->o_addr[i] % 10 == 9)
+			memset(buff, 0x99, 4096);
+
 		HIL->HIL_WriteLPN(twrite_header->t_addr_start + i, 0xff, buff);
 
 		if (twrite_header->o_addr[i] == RSP_INVALID_LPN)
@@ -310,6 +334,79 @@ int SHRD_host::HOST_gen_random_workload() {
 	do_twrite(max_packed_rw);
 
 	return 0;
+}
+
+void SHRD_host::HOST_verify_random_workload() {
+
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+	printf("\nVerifying\n");
+
+	for (RSP_UINT32 i = 0; i < LPN_RANGE; i++) {
+
+		memset(buff, 0x00, 4096);
+
+		if (i == 8)
+			printf("!!");
+
+		//HIL->HIL_ReadLPN(i, i, 0xff, buff);
+		if (i % 2 == 0)
+			HIL->pATLWrapper[0]->RSP_ReadPage(i, i / 2, 0xff, buff);
+		else
+			HIL->pATLWrapper[1]->RSP_ReadPage(i, i / 2, 0xff, buff);
+
+		if (i == 1888)
+			printf("!!");
+
+		if (i % 10000 == 0)
+			printf("-");
+		if (*buff == 0x00000000 || *buff == 0xcdcdcdcd)
+			continue;
+
+		switch (i % 10) {
+		case 0: 
+			if (*buff != 0xffffffff)
+				HOST_ASSERT(0);
+			break;
+		case 1:
+			if (*buff != 0x11111111)
+				HOST_ASSERT(0);
+			break;
+		case 2: 
+			if (*buff != 0x22222222)
+				HOST_ASSERT(0);
+			break;
+		case 3:
+			if (*buff != 0x33333333)
+				HOST_ASSERT(0);
+			break;
+		case 4:
+			if (*buff != 0x44444444)
+				HOST_ASSERT(0);
+			break;
+		case 5:
+			if (*buff != 0x55555555)
+				HOST_ASSERT(0);
+			break;
+		case 6:
+			if (*buff != 0x66666666)
+				HOST_ASSERT(0);
+			break;
+		case 7:
+			if (*buff != 0x77777777)
+				HOST_ASSERT(0);
+			break;
+		case 8:
+			if (*buff != 0x88888888)
+				HOST_ASSERT(0);
+			break;
+		case 9:
+			if (*buff != 0x99999999)
+				HOST_ASSERT(0);
+			break;
+		}
+	}
+
+	printf("verify end\n");
 }
 
 RSP_BOOL SHRD_host::HOST_Write(RSP_UINT32 SectAddr, RSP_UINT32 SectCount, RSP_UINT32 *buff) {
