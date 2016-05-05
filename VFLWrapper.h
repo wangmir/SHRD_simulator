@@ -13,7 +13,7 @@ typedef struct ProgramOp
 	RSP_UINT8 nPage;
 	RSP_UINT16 nBlock;
 	RSP_UINT16 bmpTargetSector;
-	RSP_UINT32 m_anVPN[2];
+	RSP_UINT32 m_anVPN[2]; 
 	RSP_UINT32 m_anLPN[2];
 
 }RSPProgramOp;

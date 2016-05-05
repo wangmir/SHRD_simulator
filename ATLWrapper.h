@@ -233,6 +233,10 @@ enum ReadState{
 		RSP_UINT32 cur_write_vpn_JN;
 		RSP_UINT32 cur_write_vpn_RW;
 
+		//for incremental GC
+		RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX
+		RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX
+
 		RSP_UINT32 cur_map_vpn;
 		RSP_UINT32 MAP_GC_BLK;
 		RSP_UINT32 map_free_blk;
@@ -341,6 +345,14 @@ namespace Hesper{
 		//Bank status
 		NAND_bankstat* NAND_bank_state[NAND_NUM_CHANNELS];
 
+		//currently write bank number (include channel in it)
+		//e.g. 0 means channel 0 bank 0, 1 means channel 1 bank 0, etc.
+		RSP_UINT32	cur_write_bank;
+
+#define inc_cur_write_bank() {cur_write_bank++; if(cur_write_bank == (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)){cur_write_bank = 0;}}
+#define cur_gc_bank() {(cur_write_bank + (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL) / 2) % (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)}
+#define GC_THRESHOLD 4
+
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;
 		REMAP_HDR_ENTRY *remap_hdr_entry;
 
@@ -395,10 +407,13 @@ namespace Hesper{
 		RSP_UINT32 get_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_VOID set_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, RSP_UINT32 vcount);
 		RSP_VOID garbage_collection(RSP_UINT32 channel, RSP_UINT32 bank);
+		RSP_UINT32 inter_GC(RSP_UINT32 channel, RSP_UINT32 bank);
+		//if non-zero, it did incremental GC, else not
+		RSP_UINT32 incremental_GC(RSP_UINT32 channel, RSP_UINT32 bank);
+		//return the number of read page
+		RSP_UINT32 do_incremental_GC(RSP_UINT32 channel, RSP_UINT32 bank);
 
 		RSP_UINT32 get_free_block(RSP_UINT32 channel, RSP_UINT32 bank);
-
-		RSP_UINT32 inter_GC(RSP_UINT32 channel, RSP_UINT32 bank);
 
 		RSP_UINT32 get_vt_vblock(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_BOOL RSP_Open(RSP_VOID);
@@ -445,8 +460,11 @@ namespace Hesper{
 		RSP_VOID flush_bank(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_VOID write_buffer_flush(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT8 WRITE_TYPE);
 		RSP_VOID test_NAND_list();
+		
+		/*
 		RSP_UINT32 map_vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_UINT32 vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
+		*/
 	};
 }
 
