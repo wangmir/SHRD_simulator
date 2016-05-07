@@ -234,8 +234,8 @@ enum ReadState{
 		RSP_UINT32 cur_write_vpn_RW;
 
 		//for incremental GC
-		RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX
-		RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX
+		RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX (super block level 32KB page)
+		RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX (nrumal block levl, 8KB page)
 
 		RSP_UINT32 cur_map_vpn;
 		RSP_UINT32 MAP_GC_BLK;
@@ -244,6 +244,7 @@ enum ReadState{
 		RSP_UINT32 meta_blk;
 		RSP_UINT32* cpybuf_addr;
 		RSP_UINT32* GCbuf_addr;
+		RSP_UINT32* IncGCbuf_addr;
 		RSP_UINT32 GCbuf_index;
 		RSP_UINT32 GCbuf_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
 		RSP_UINT32* writebuf_addr[WRITE_TYPE_NUM][PLANES_PER_BANK];
@@ -352,6 +353,7 @@ namespace Hesper{
 #define inc_cur_write_bank() {cur_write_bank++; if(cur_write_bank == (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)){cur_write_bank = 0;}}
 #define cur_gc_bank() {(cur_write_bank + (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL) / 2) % (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)}
 #define GC_THRESHOLD 4
+#define NUM_READ_PER_INCGC 1
 
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;
 		REMAP_HDR_ENTRY *remap_hdr_entry;
