@@ -236,6 +236,8 @@ enum ReadState{
 		//for incremental GC
 		RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX (super block level 32KB page)
 		RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX (nrumal block levl, 8KB page)
+		RSP_UINT32 num_gcbuffed_valid_page;  //need to count the number of buffered valid page to keep up there remainings, if the write happened, then reduce it
+		RSP_UINT32 cur_gcbuff_idx;
 
 		RSP_UINT32 cur_map_vpn;
 		RSP_UINT32 MAP_GC_BLK;
@@ -244,7 +246,6 @@ enum ReadState{
 		RSP_UINT32 meta_blk;
 		RSP_UINT32* cpybuf_addr;
 		RSP_UINT32* GCbuf_addr;
-		RSP_UINT32* IncGCbuf_addr;
 		RSP_UINT32 GCbuf_index;
 		RSP_UINT32 GCbuf_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
 		RSP_UINT32* writebuf_addr[WRITE_TYPE_NUM][PLANES_PER_BANK];
@@ -264,6 +265,7 @@ enum ReadState{
 		block_struct_head JN_todo_list;
 		block_struct_head data_list;
 		block_struct_head RW_log_list;
+		block_struct_head victim_list;
 	};
 
 	struct TWRITE_HDR_ENTRY
@@ -410,10 +412,19 @@ namespace Hesper{
 		RSP_VOID set_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, RSP_UINT32 vcount);
 		RSP_VOID garbage_collection(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_UINT32 inter_GC(RSP_UINT32 channel, RSP_UINT32 bank);
+
 		//if non-zero, it did incremental GC, else not
 		RSP_UINT32 incremental_GC(RSP_UINT32 channel, RSP_UINT32 bank);
-		//return the number of read page
+		//decrease vcount of victim block, if the count is larger than remained vcount of top block of victim list, then additionally dcrease vcount of next victim block
+		RSP_VOID decrease_vcount_of_vt_block(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 count);
+		//read victim page into gc buffer, check whether the LPN is valid or not, pull the valid page of latter buffer if needed.
+		RSP_VOID read_victim_page(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 vt_page, RSP_UINT32 *spare_lpn, RSP_UINT32 *is_valid);
+		//flush the data in the gc buffer into available gc active block
+		RSP_VOID write_gc_buffer(RSP_UINT32 channel, RSP_UINT32 bank);
+		//if there are full invalid block in the victim list, than erase, and return the block into gc block or free block 
+		RSP_UINT32 erase_victim_block(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_UINT32 do_incremental_GC(RSP_UINT32 channel, RSP_UINT32 bank);
+		RSP_UINT32 check_n_invalid_GCbuff(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 lpn, RSP_UINT32 block);
 
 		RSP_UINT32 get_free_block(RSP_UINT32 channel, RSP_UINT32 bank);
 
