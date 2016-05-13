@@ -858,9 +858,6 @@ namespace Hesper{
 			return NULL;
 		}
 
-		if (twrite_entry->addr_start == 28830072 && twrite_entry->io_count == 48)
-			RSP_UINT32 err = 3;
-
 		offset = tLPN * NUM_FTL_CORE + THIS_CORE - twrite_entry->addr_start;
 		//RSP_ASSERT((tLPN * NUM_FTL_CORE + THIS_CORE >= twrite_entry->addr_start));
 		if(tLPN * NUM_FTL_CORE + THIS_CORE < twrite_entry->addr_start){
@@ -1875,11 +1872,6 @@ namespace Hesper{
 		map_page = lpn / NUM_PAGES_PER_MAP;
 		map_page_offset = lpn % NUM_PAGES_PER_MAP;
 
-		//dbg
-		if (lpn == 17537)
-			RSP_UINT32 err = 3;
-		//dbg
-
 		if(lpn >= NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE){
 			dbg1 = lpn;
 			dbg2 = NUM_LBLK;
@@ -2013,14 +2005,11 @@ namespace Hesper{
 		map_page = lpn / NUM_PAGES_PER_MAP;
 		map_page_offset = lpn % NUM_PAGES_PER_MAP;
 
+		if (lpn == 176651 && _COREID_ == 1)
+			RSP_UINT32 err = 3;
+
 		RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
-
-		//dbg
-		if ((lpn == 180 / 2 || lpn == 208 / 2 || lpn ==340 / 2 || lpn == 494 / 2)&& _COREID_ == 1)
-			RSP_UINT32 err = 3;
-		
-		//dbg
 
 		//check this map_page is in DRAM
 		for (loop = 0; loop < NUM_CACHED_MAP; loop++)
@@ -2684,6 +2673,8 @@ namespace Hesper{
 		m_pVFLWrapper->_GetSpareData(spare_area);
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_read, 1);
 
+		old_vpn += ((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK);
+
 		for (RSP_UINT32 iter = 0; iter < LPAGE_PER_PPAGE; iter++) {
 
 			is_valid[iter] = 0;
@@ -2699,8 +2690,13 @@ namespace Hesper{
 				RSP_UINT32 read_vpn = get_vpn(spare_lpn[iter], Prof_IntraGC);
 				RSP_ASSERT(spare_lpn[iter] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 				RSP_ASSERT(read_vpn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || read_vpn == VC_MAX || is_in_write_buffer(read_vpn));
-				if (old_vpn * LPAGE_PER_PPAGE + iter == read_vpn)
+				if (old_vpn * LPAGE_PER_PPAGE + iter == read_vpn) {
 					is_valid[iter] = 1;
+
+					//debug
+					if (spare_lpn[iter] == 176651 && _COREID_ == 1)
+						printf("!!");
+				}
 			}
 		}
 
@@ -2719,7 +2715,7 @@ namespace Hesper{
 
 		RSPProgramOp RSP_write_ops[PLANES_PER_BANK];
 		RSP_UINT32 super_blk, plane_ppn[LPAGE_PER_PPAGE], valid_count = 0;
-		RSP_UINT32 free_vpn_idx = NAND_bank_state[channel][bank].cur_gc_vpn;;
+		RSP_UINT32 free_vpn_idx = NAND_bank_state[channel][bank].cur_gc_vpn;
 		RSP_UINT32 gc_block;
 		RSP_UINT32 *gc_buff;
 
@@ -2741,6 +2737,7 @@ namespace Hesper{
 		}
 		else {
 			free_vpn_idx++;
+			NAND_bank_state[channel][bank].cur_gc_vpn = free_vpn_idx;
 		}
 
 		super_blk = free_vpn_idx / PAGES_PER_BLK;
@@ -2823,6 +2820,7 @@ namespace Hesper{
 					if (!free_block)
 						RSP_ASSERT(0);
 					set_gc_block(channel, bank, free_block);
+					del_blk_from_list(channel, bank, free_block, &NAND_bank_state[channel][bank].free_list);
 					insert_bl_tail(channel, bank, vt_block, &NAND_bank_state[channel][bank].free_list);
 				}
 				else {
@@ -2847,10 +2845,12 @@ namespace Hesper{
 		RSP_UINT32 *gc_buff;
 		RSP_UINT32 num_write = 0;
 
+		after_gc = 1;
+
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_num, 1);
 
 		//there are full invalid block to erase (copy over)
-		if (!NAND_bank_state[channel][bank].victim_list.head->vcount)
+		if (NAND_bank_state[channel][bank].victim_list.size && !NAND_bank_state[channel][bank].victim_list.head->vcount)
 			goto do_erase;
 
 		//switch the gc buffer to ensure the completion of previous buffer
@@ -2864,6 +2864,7 @@ namespace Hesper{
 		if(vt_vpn_idx == VC_MAX){
 			//there are no victim block currently. choose one
 			vt_block = get_vt_vblock(channel, bank);
+
 			if(!vt_block)
 				RSP_ASSERT(0);
 
@@ -2940,11 +2941,11 @@ namespace Hesper{
 			//there are no remained valid page to read
 			NAND_bank_state[channel][bank].cur_vt_vpn = VC_MAX;
 		}
-		else if (vt_vpn_idx / PAGES_PER_BLK * PLANES_PER_BANK != vt_block) {
+		else if (vt_vpn_idx / (PAGES_PER_BLK * PLANES_PER_BANK) != vt_block) {
 			//read all of page in the victim block, need to set as VC_MAX, and it must have no valid page to read, numgc_buffer must be larger or same than vcount
 			if (vcount > NAND_bank_state[channel][bank].num_gcbuffed_valid_page)
 				RSP_ASSERT(0);
-			if (vt_vpn_idx / PAGES_PER_BLK * PLANES_PER_BANK != vt_block + 1)
+			if (vt_vpn_idx / (PAGES_PER_BLK * PLANES_PER_BANK) != vt_block + 1)
 				// it should be straight next of the vt_block, if not it might be wrong
 				RSP_ASSERT(0);
 
@@ -3008,6 +3009,14 @@ do_erase:
 			block = blk_tmp->block_no;
 			//if the block is on-going, then skip it
 			if ((block == NAND_bank_state[channel][bank].cur_write_vpn / PAGES_PER_BLK) && (NAND_bank_state[channel][bank].cur_write_vpn % PAGES_PER_BLK != PAGES_PER_BLK - 1)){
+				blk_tmp = blk_tmp->next;
+				continue;
+			}
+			else if ((block == NAND_bank_state[channel][bank].cur_write_vpn_RW / PAGES_PER_BLK) && (NAND_bank_state[channel][bank].cur_write_vpn_RW % PAGES_PER_BLK != PAGES_PER_BLK - 1)) {
+				blk_tmp = blk_tmp->next;
+				continue;
+			}
+			else if ((block == NAND_bank_state[channel][bank].cur_write_vpn_JN / PAGES_PER_BLK) && (NAND_bank_state[channel][bank].cur_write_vpn_JN % PAGES_PER_BLK != PAGES_PER_BLK - 1)) {
 				blk_tmp = blk_tmp->next;
 				continue;
 			}

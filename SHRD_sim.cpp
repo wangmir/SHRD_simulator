@@ -324,6 +324,8 @@ static void run_workload() {
 	while (1) {
 		if(i % 100 == 0)
 			printf("-");
+		if (i == 26018)
+			printf("!!");
 
 		HOST->HOST_gen_random_workload();
 		if (HOST->write_amount > total_write_pages)
@@ -331,7 +333,7 @@ static void run_workload() {
 		i++;
 
 		if (ATL_0->after_gc || ATL_1->after_gc)
-			HOST->HOST_verify_random_workload();
+			HOST->HOST_verify_lpn(353302);
 	}
 
 	HOST->HOST_verify_random_workload();

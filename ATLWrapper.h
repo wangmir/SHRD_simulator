@@ -354,7 +354,7 @@ namespace Hesper{
 
 #define inc_cur_write_bank() {cur_write_bank++; if(cur_write_bank == (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)){cur_write_bank = 0;}}
 #define cur_gc_bank() {(cur_write_bank + (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL) / 2) % (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)}
-#define GC_THRESHOLD 4
+#define GC_THRESHOLD 8
 #define NUM_READ_PER_INCGC 1
 
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;

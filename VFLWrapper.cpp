@@ -150,12 +150,17 @@ bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
 
 	
 	RSP_UINT32 offset = RSPOp.nPage;
+	RSP_UINT32 ret = 0;
+
 
 	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
-	fread((char *) RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data[CORE_ID]);
+	ret = fread((char *) RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data[CORE_ID]);
+	if (ret == 0)
+		perror("Read MetaIssue");
 	_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
-	fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
-
+	ret = fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
+	if (ret == 0)
+		perror("Read MetaIssue");
 	return true;
 }
 

@@ -106,7 +106,7 @@ public:
 	int HOST_gen_random_workload();
 
 	//for realitic host simulation
-
+	void HOST_verify_lpn(RSP_UINT32 lpn);
 	void HOST_verify_random_workload();
 
 	RSP_BOOL HOST_Write(RSP_UINT32 SectAddr, RSP_UINT32 SectCount, RSP_UINT32 *buff);

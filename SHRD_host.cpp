@@ -52,7 +52,7 @@ void SHRD_host::do_twrite(RSP_UINT32 max_packed_rw) {
 
 		LPN = (rand() * rand()) % LPN_RANGE;
 
-		if (LPN == 8)
+		if (LPN == 35302)
 			printf("!!");
 
 		page_count = 1; //it can be varied.
@@ -226,6 +226,11 @@ void SHRD_host::__do_remap(RSP_UINT32 size) {
 				memset(remap_entry, 0x00, sizeof(SHRD_REMAP_DATA));
 			}
 
+			if (map->o_addr == 35302) {
+				printf("!!");
+
+			}
+
 			remap_entry->o_addr[remap_entry->remap_count] = map->o_addr;
 			remap_entry->t_addr[remap_entry->remap_count] = map->t_addr;
 			map->flags = SHRD_REMAPPING_MAP;
@@ -336,6 +341,62 @@ int SHRD_host::HOST_gen_random_workload() {
 	return 0;
 }
 
+void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn) {
+
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+
+	if (lpn % 2 == 0)
+		HIL->pATLWrapper[0]->RSP_ReadPage(lpn, lpn / 2, 0xff, buff);
+	else
+		HIL->pATLWrapper[1]->RSP_ReadPage(lpn, lpn / 2, 0xff, buff);
+
+	if (*buff == 0x00000000 || *buff == 0xcdcdcdcd)
+		return;
+
+	switch (lpn % 10) {
+	case 0:
+		if (*buff != 0xffffffff)
+			HOST_ASSERT(0);
+		break;
+	case 1:
+		if (*buff != 0x11111111)
+			HOST_ASSERT(0);
+		break;
+	case 2:
+		if (*buff != 0x22222222)
+			HOST_ASSERT(0);
+		break;
+	case 3:
+		if (*buff != 0x33333333)
+			HOST_ASSERT(0);
+		break;
+	case 4:
+		if (*buff != 0x44444444)
+			HOST_ASSERT(0);
+		break;
+	case 5:
+		if (*buff != 0x55555555)
+			HOST_ASSERT(0);
+		break;
+	case 6:
+		if (*buff != 0x66666666)
+			HOST_ASSERT(0);
+		break;
+	case 7:
+		if (*buff != 0x77777777)
+			HOST_ASSERT(0);
+		break;
+	case 8:
+		if (*buff != 0x88888888)
+			HOST_ASSERT(0);
+		break;
+	case 9:
+		if (*buff != 0x99999999)
+			HOST_ASSERT(0);
+		break;
+	}
+}
+
 void SHRD_host::HOST_verify_random_workload() {
 
 	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
@@ -345,17 +406,11 @@ void SHRD_host::HOST_verify_random_workload() {
 
 		memset(buff, 0x00, 4096);
 
-		if (i == 8)
-			printf("!!");
-
 		//HIL->HIL_ReadLPN(i, i, 0xff, buff);
 		if (i % 2 == 0)
 			HIL->pATLWrapper[0]->RSP_ReadPage(i, i / 2, 0xff, buff);
 		else
 			HIL->pATLWrapper[1]->RSP_ReadPage(i, i / 2, 0xff, buff);
-
-		if (i == 1888)
-			printf("!!");
 
 		if (i % 10000 == 0)
 			printf("-");
