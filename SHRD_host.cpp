@@ -460,7 +460,7 @@ void SHRD_host::HOST_verify_random_workload() {
 			break;
 		}
 	}
-
+	//free(buff);
 	printf("verify end\n");
 }
 
