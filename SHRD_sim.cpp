@@ -283,8 +283,6 @@ static void run_trace(FILE *fp_in){
 		i++;
 		if (i % 100 == 0)
 			printf("-");
-		if (i == 13147)
-			RSP_UINT32 err = 3;
 		ret = get_CMD(fp_in, HIL);
 		if (ret == 0)
 			break;
@@ -294,7 +292,7 @@ static void run_trace(FILE *fp_in){
 	RSP_UINT32 *profile1 = VFL_1->profile;
 }
 
-static void run_workload() {
+static void run_normal_workload() {
 
 	RSP_UINT32 i = 0;
 
@@ -317,9 +315,84 @@ static void run_workload() {
 	//HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
 	//HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
 
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+
+	SHRD_host *HOST = new SHRD_host(HIL);
+	srand(0xabcdef);
+
+	RSP_UINT32 total_write_pages = 64 * 262144; //110G
+
+	while (1) {
+		if (i % 10000 == 0)
+			printf("-");
+		
+		RSP_UINT32 LPN = (rand() * rand()) % LPN_RANGE;
+
+		memset(buff, 0xff, 4096);
+		if (LPN == RSP_INVALID_LPN)
+			memset(buff, 0xaa, 4096);
+		else if (LPN % 10 == 0)
+			memset(buff, 0xff, 4096);
+		else if (LPN % 10 == 1)
+			memset(buff, 0x11, 4096);
+		else if (LPN % 10 == 2)
+			memset(buff, 0x22, 4096);
+		else if (LPN % 10 == 3)
+			memset(buff, 0x33, 4096);
+		else if (LPN % 10 == 4)
+			memset(buff, 0x44, 4096);
+		else if (LPN % 10 == 5)
+			memset(buff, 0x55, 4096);
+		else if (LPN % 10 == 6)
+			memset(buff, 0x66, 4096);
+		else if (LPN % 10 == 7)
+			memset(buff, 0x77, 4096);
+		else if (LPN % 10 == 8)
+			memset(buff, 0x88, 4096);
+		else if (LPN % 10 == 9)
+			memset(buff, 0x99, 4096);
+
+		HIL->HIL_WriteLPN(LPN, 0xff, buff);
+
+		if (i > total_write_pages)
+			break;
+		i++;
+	}
+
+	HOST->HOST_verify_random_workload(buff);
+
+	RSP_UINT32 *profile0 = VFL_0->profile;
+	RSP_UINT32 *profile1 = VFL_1->profile;
+}
+
+
+static void run_shrd_workload() {
+
+	RSP_UINT32 i = 0;
+
+	VFLWrapper* VFL_0 = new VFLWrapper(working_dir, 0);
+	ATLWrapper* ATL_0 = new ATLWrapper(VFL_0, 1);
+
+	VFLWrapper* VFL_1 = new VFLWrapper(working_dir, 1);
+	ATLWrapper* ATL_1 = new ATLWrapper(VFL_1, 2);
+
+	HILWrapper* HIL = new HILWrapper(ATL_0, ATL_1);
+
+	VFL_0->HIL_ptr(HIL);
+	VFL_1->HIL_ptr(HIL);
+
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+	printf("\n==RUN FTL simulation with workload generator==\n");
+
+	ATL_0->RSP_Open();
+	ATL_1->RSP_Open();
+
+	//HIL->HIL_ReadLPN(command.RID, command.LPN, command.SectorBitmap, command.BufferAddress);
+	//HIL->HIL_WriteLPN(command.LPN, command.SectorBitmap, command.BufferAddress);
+
 	SHRD_host *HOST = new SHRD_host(HIL);
 
-	RSP_UINT32 total_write_pages = 48 * 262144; //110G
+	RSP_UINT32 total_write_pages = 110 * 262144; //110G
 
 	while (1) {
 		if(i % 100 == 0)
@@ -336,7 +409,7 @@ static void run_workload() {
 		}*/
 	}
 
-	HOST->HOST_verify_random_workload();
+	HOST->HOST_verify_random_workload(buff);
 
 	RSP_UINT32 *profile0 = VFL_0->profile;
 	RSP_UINT32 *profile1 = VFL_1->profile;
@@ -372,7 +445,8 @@ void main(int argc, char *argv[]){
 	fp_in = fopen(trace_addr, "r");
 
 	//run_trace(fp_in);
-	run_workload();
+	//run_shrd_workload();
+	run_normal_workload();
 }
 
 

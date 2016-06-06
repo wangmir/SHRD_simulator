@@ -18,6 +18,27 @@
 	oob size is: two u32 per lpage
 */
 
+int dbg1 = 0;
+
+//for small data block
+RSP_UINT64 VFLWrapper::calc_seek_address(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block) {
+
+	RSP_UINT64 seek;
+	RSP_UINT64 bank_num = channel * BANKS_PER_CHANNEL + bank;
+
+	seek = PLANES_PER_BANK * (NUM_MAP_BLOCKS * VFL_BLOCK_DATA_SIZE + (BLKS_PER_BANK - NUM_MAP_BLOCKS) * VFL_SMALL_BLOCK_DATA_SIZE);
+	seek *= bank_num;
+
+	if (block >= NUM_MAP_BLOCKS * PLANES_PER_BANK) {
+		seek += PLANES_PER_BANK * NUM_MAP_BLOCKS * VFL_BLOCK_DATA_SIZE;
+		seek += (block - NUM_MAP_BLOCKS) * VFL_SMALL_BLOCK_DATA_SIZE;
+	}
+	else {
+		seek += block * VFL_BLOCK_DATA_SIZE;
+	}
+	return seek;
+}
+
 VFLWrapper::VFLWrapper(char * Working_dir, RSP_UINT32 CORE){
 
 	char temp[1024];
@@ -42,19 +63,43 @@ void VFLWrapper::HIL_ptr(void *pHIL){
 //READ
 bool VFLWrapper::Issue(RSPReadOp RSPOp){
 
-	RSP_UINT32 seek = 0;
+	RSP_UINT64 seek = 0;
 	
 	seek += RSPOp.nChannel * (BANKS_PER_CHANNEL * PLANES_PER_BANK * BLKS_PER_PLANE);
 	seek += RSPOp.nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 	seek += RSPOp.nBlock;
 
-	RSP_UINT32 offset = RSPOp.nPage * LPAGE_PER_PPAGE;
+	RSP_UINT64 offset = RSPOp.nPage * LPAGE_PER_PPAGE;
 
 	if (RSPOp.bmpTargetSector == 0xff00){
 		offset++;
 	}
 
-	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_SECTOR_PER_LPN * RSP_BYTE_PER_SECTOR, SEEK_SET);
+	RSP_UINT64 seek_block = seek * VFL_BLOCK_DATA_SIZE;
+	
+#if SMALL_DATA_BLOCK
+
+	seek_block = calc_seek_address(RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+
+	if (RSPOp.nBlock >= NUM_MAP_BLOCKS * PLANES_PER_BANK) {
+
+		_fseeki64(fp_data[CORE_ID], seek_block + offset * sizeof(RSP_UINT32), SEEK_SET);
+		fread((char *)RSPOp.pData, sizeof(RSP_UINT32), 1, fp_data[CORE_ID]);
+
+		//2 means o_addr and t_addr pair on the spare area
+		fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * sizeof(RSP_UINT32), SEEK_SET);
+		if (RSPOp.bmpTargetSector == 0xff) {
+			fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2, 1, fp_oob[CORE_ID]);
+		}
+		else {
+			fread((char *)&latest_sparedata[2], sizeof(RSP_UINT32) * 2, 1, fp_oob[CORE_ID]);
+		}
+
+		return true;
+	}
+#endif
+
+	_fseeki64(fp_data[CORE_ID], seek_block + offset * RSP_SECTOR_PER_LPN * RSP_BYTE_PER_SECTOR, SEEK_SET);
 	fread((char *)RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_LPN, 1, fp_data[CORE_ID]);
 
 	//2 means o_addr and t_addr pair on the spare area
@@ -81,15 +126,35 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 			continue;
 
 		RSP_UINT64 seek = 0;
-
+		RSP_UINT32 ret = 0;
 		seek += RSPOp[plane].nChannel * (BANKS_PER_CHANNEL * PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBank * (PLANES_PER_BANK * BLKS_PER_PLANE);
 		seek += RSPOp[plane].nBlock;
 
 		RSP_UINT32 offset = RSPOp[plane].nPage;
+		RSP_UINT64 seek_block = seek * VFL_BLOCK_DATA_SIZE;
 
-		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
-		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
+#if SMALL_DATA_BLOCK
+
+		seek_block = calc_seek_address(RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+
+		if (RSPOp[plane].nBlock >= NUM_MAP_BLOCKS * PLANES_PER_BANK) {
+
+			//_fseeki64(fp_data[CORE_ID], seek_block + offset * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+			//fwrite((char *)RSPOp[plane].pData, sizeof(RSP_UINT32) * LPAGE_PER_PPAGE, 1, fp_data[CORE_ID]);
+
+			////2 means o_addr and t_addr pair on the spare area
+			//fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+			//fwrite((char *)RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
+			HIL->HIL_BuffFree(RSPOp[plane].pData);
+
+			continue;
+		}
+#endif
+		_fseeki64(fp_data[CORE_ID], seek_block + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
+		ret = fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
+		if (ret == 0)
+			perror("Write Issue");
 
 		_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
 		fwrite((char *) RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
@@ -127,7 +192,26 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 
 		RSP_UINT32 offset = RSPOp[plane].nPage;
 
-		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
+		RSP_UINT64 seek_block = seek * VFL_BLOCK_DATA_SIZE;
+
+#if SMALL_DATA_BLOCK
+
+		seek_block = calc_seek_address(RSPOp[plane].nChannel, RSPOp[plane].nBank, RSPOp[plane].nBlock);
+		if (RSPOp[plane].nBlock >= NUM_MAP_BLOCKS * PLANES_PER_BANK) {
+
+			RSP_UINT32 temp = NUM_MAP_BLOCKS * PLANES_PER_BANK;
+
+			_fseeki64(fp_data[CORE_ID], seek_block + offset * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+			fwrite((char *)RSPOp[plane].pData, sizeof(RSP_UINT32) * LPAGE_PER_PPAGE, 1, fp_data[CORE_ID]);
+
+			//2 means o_addr and t_addr pair on the spare area
+			fseek(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+			fwrite((char *)RSPOp[plane].pSpareData, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
+
+			continue;
+		}
+#endif
+		_fseeki64(fp_data[CORE_ID], seek_block + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
 
 		_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
@@ -151,9 +235,27 @@ bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
 	
 	RSP_UINT32 offset = RSPOp.nPage;
 	RSP_UINT32 ret = 0;
+	RSP_UINT64 seek_block = seek * VFL_BLOCK_DATA_SIZE;
 
+#if SMALL_DATA_BLOCK
 
-	_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
+	seek_block = calc_seek_address(RSPOp.nChannel, RSPOp.nBank, RSPOp.nBlock);
+	if (RSPOp.nBlock >= NUM_MAP_BLOCKS * PLANES_PER_BANK) {
+		
+		_fseeki64(fp_data[CORE_ID], seek_block + offset * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+		ret = fread((char *)RSPOp.pData, LPAGE_PER_PPAGE * sizeof(RSP_UINT32), 1, fp_data[CORE_ID]);
+		if (ret == 0)
+			perror("Read MetaIssue");
+
+		_fseeki64(fp_oob[CORE_ID], seek * VFL_BLOCK_OOB_SIZE + offset * 2 * LPAGE_PER_PPAGE * sizeof(RSP_UINT32), SEEK_SET);
+		ret = fread((char *)latest_sparedata, sizeof(RSP_UINT32) * 2 * LPAGE_PER_PPAGE, 1, fp_oob[CORE_ID]);
+		if (ret == 0)
+			perror("Read MetaIssue");
+		return true;
+	}
+#endif
+
+	_fseeki64(fp_data[CORE_ID], seek_block + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 	ret = fread((char *) RSPOp.pData, RSP_BYTE_PER_SECTOR * RSP_SECTOR_PER_PAGE, 1, fp_data[CORE_ID]);
 	if (ret == 0)
 		perror("Read MetaIssue");

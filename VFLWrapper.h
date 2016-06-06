@@ -42,9 +42,13 @@ class VFLWrapper
 {
 	public:
 
-#define VFL_BLOCK_DATA_SIZE (1048576)
+
+#define SMALL_DATA_BLOCK 1
+#define VFL_BLOCK_DATA_SIZE (1048576LL)
+#define VFL_SMALL_BLOCK_DATA_SIZE (1024LL)
 #define VFL_BLOCK_OOB_SIZE (2048)
 
+#define NUM_MAP_BLOCKS 5
 
 		char dir[1024];
 		char temp_dir[1024];
@@ -74,6 +78,8 @@ class VFLWrapper
 		void WAIT_READPENDING();
 		void _GetSpareData(RSP_UINT32* spare_buf);
 	
+		RSP_UINT64 calc_seek_address(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
+
 		bool Issue(RSPProgramOp RSPOp[4]);
 		bool Issue(RSPReadOp RSPOp);
 		bool Issue(RSPEraseOp RSPOp[4]);

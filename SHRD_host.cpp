@@ -341,9 +341,9 @@ int SHRD_host::HOST_gen_random_workload() {
 	return 0;
 }
 
-void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn) {
+void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn, RSP_UINT32 *buff) {
 
-	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+	memset(buff, 0x00, 4096);
 
 	if (lpn % 2 == 0)
 		HIL->pATLWrapper[0]->RSP_ReadPage(lpn, lpn / 2, 0xff, buff);
@@ -397,9 +397,9 @@ void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn) {
 	}
 }
 
-void SHRD_host::HOST_verify_random_workload() {
+void SHRD_host::HOST_verify_random_workload(RSP_UINT32 *buff) {
 
-	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+	//RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
 	printf("\nVerifying\n");
 
 	for (RSP_UINT32 i = 0; i < LPN_RANGE; i++) {
@@ -460,7 +460,6 @@ void SHRD_host::HOST_verify_random_workload() {
 			break;
 		}
 	}
-	//free(buff);
 	printf("verify end\n");
 }
 

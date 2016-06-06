@@ -116,15 +116,6 @@ namespace Hesper{
 	{
 	}
 
-	RSP_UINT32* ATLWrapper::get_tempbuf(RSP_VOID){
-
-		if (Temp_writebuf_idx == NUM_WRITEBUF_ENTRY)
-			Temp_writebuf_idx = 0;
-
-		return Temp_writebuf[Temp_writebuf_idx++];
-
-	}
-
 	RSP_BOOL
 		ATLWrapper::RSP_Open(RSP_VOID)
 	{
@@ -137,8 +128,6 @@ namespace Hesper{
 		NUM_LBLK = NUM_LOGICAL_BLOCK;
 		NUM_CACHED_MAP = CMT_size / (BYTES_PER_SUPER_PAGE);
 
-		//VCOUNT = (RSP_UINT32*)rspmalloc(NUM_PBLK * sizeof_u32);
-
 		CACHE_ADDR = (RSP_UINT32*)rspmalloc(CMT_size);
 		CACHE_MAPPING_TABLE = (RSP_UINT32*)rspsmalloc(NUM_CACHED_MAP * sizeof_u32);
 		cache_count = (RSP_UINT32*)rspsmalloc(NUM_CACHED_MAP * sizeof_u32);
@@ -147,16 +136,7 @@ namespace Hesper{
 		MAP_VALID_COUNT = (RSP_UINT32*)rspmalloc(TOTAL_MAP_BLK * sizeof_u32);
 		MAPP2L = (RSP_UINT32*)rspmalloc(TOTAL_MAP_BLK * PAGES_PER_BLK * sizeof_u32);
 		CACHE_MAP_DIRTY_TABLE = (RSP_BOOL*)rspmalloc(NUM_CACHED_MAP);
-
-		//Temp writebuffer for Normal & Joural write buffer
-		//currently the buffer will be returned with round-robin manner, and Normal, Journal write should be 
-		//sync write. (wait)
-		Temp_writebuf = (RSP_UINT32 **)rspmalloc(sizeof(RSP_UINT32 *)* NUM_WRITEBUF_ENTRY);
-		for (RSP_UINT32 iter = 0; iter < NUM_WRITEBUF_ENTRY; iter++){
-			Temp_writebuf[iter] = (RSP_UINT32 *)rspmalloc(sizeof(RSP_UINT32)* RSP_BYTES_PER_PAGE);
-		}
-		Temp_writebuf_idx = 0;
-
+		
 		//SHRD entries
 		twrite_hdr_entry = (TWRITE_HDR_ENTRY *)rspmalloc(NUM_MAX_TWRITE * 2 * sizeof(TWRITE_HDR_ENTRY));
 		remap_hdr_entry = (REMAP_HDR_ENTRY *)rspmalloc(NUM_MAX_REMAP * sizeof(REMAP_HDR_ENTRY));
@@ -424,11 +404,7 @@ namespace Hesper{
 					victim_blk = i;
 				}
 			}
-			if (vcount != 0)
-				int i = 0;
-			if (channel == 0 && bank == 0)
-				if (victim_blk == 0)
-					int test = 0;
+
 			free_page = NAND_bank_state[channel][bank].MAP_GC_BLK * PAGES_PER_BLK;
 			for (i = 0; i < PAGES_PER_BLK; i++)
 			{
