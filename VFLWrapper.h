@@ -71,23 +71,23 @@ class VFLWrapper
 		void HIL_ptr(void *pHIL);
 
 		void INC_PROGRAMPENDING();
-		void WAIT_PROGRAMPENDING();
+		void WAIT_PROGRAMPENDING(RSP_UINT32 *dbg);
 		void INC_ERASEPENDING();
-		void WAIT_ERASEPENDING();
+		void WAIT_ERASEPENDING(RSP_UINT32 *dbg);
 		void INC_READPENDING();
-		void WAIT_READPENDING();
+		void WAIT_READPENDING(RSP_UINT32 *dbg);
 		void _GetSpareData(RSP_UINT32* spare_buf);
 	
 		RSP_UINT64 calc_seek_address(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 
-		bool Issue(RSPProgramOp RSPOp[4]);
-		bool Issue(RSPReadOp RSPOp);
-		bool Issue(RSPEraseOp RSPOp[4]);
+		bool Issue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
+		bool Issue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
+		bool Issue(RSPEraseOp RSPOp[4], RSP_UINT32 *dbg);
 
 		bool test();
 
-		bool MetaIssue(RSPProgramOp RSPOp[4]);
-		bool MetaIssue(RSPReadOp RSPOp);
+		bool MetaIssue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
+		bool MetaIssue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
 
 		bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);

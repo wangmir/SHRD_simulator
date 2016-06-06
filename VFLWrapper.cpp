@@ -61,7 +61,7 @@ void VFLWrapper::HIL_ptr(void *pHIL){
 }
 
 //READ
-bool VFLWrapper::Issue(RSPReadOp RSPOp){
+bool VFLWrapper::Issue(RSPReadOp RSPOp, RSP_UINT32 *dbg){
 
 	RSP_UINT64 seek = 0;
 	
@@ -116,7 +116,7 @@ bool VFLWrapper::Issue(RSPReadOp RSPOp){
 }
 
 //WRITE
-bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
+bool VFLWrapper::Issue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg){
 
 	HILWrapper *HIL = (HILWrapper *) pHILWrapper;
 
@@ -168,7 +168,7 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4]){
 }
 
 //ERASE
-bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
+bool VFLWrapper::Issue(RSPEraseOp RSPOp[4], RSP_UINT32 *dbg){
 
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
@@ -177,7 +177,7 @@ bool VFLWrapper::Issue(RSPEraseOp RSPOp[4]){
 	return true;
 }
 
-bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
+bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg){
 
 	for (RSP_UINT32 plane = 0; plane < PLANES_PER_BANK; plane++){
 
@@ -224,7 +224,7 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4]){
 }
 
 //METAISSUE read performs with 8KB page (not 4KB LPAGE)
-bool VFLWrapper::MetaIssue(RSPReadOp RSPOp){
+bool VFLWrapper::MetaIssue(RSPReadOp RSPOp, RSP_UINT32 *dbg){
 
 	RSP_UINT64 seek = 0;
 
@@ -292,15 +292,15 @@ bool VFLWrapper::RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData){
 	return true;
 }
 
-void VFLWrapper::WAIT_READPENDING(){
+void VFLWrapper::WAIT_READPENDING(RSP_UINT32 *dbg){
 
 }
 
-void VFLWrapper::WAIT_PROGRAMPENDING(){
+void VFLWrapper::WAIT_PROGRAMPENDING(RSP_UINT32 *dbg){
 
 }
 
-void VFLWrapper::WAIT_ERASEPENDING(){
+void VFLWrapper::WAIT_ERASEPENDING(RSP_UINT32 *dbg){
 
 }
 

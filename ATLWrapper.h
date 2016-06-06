@@ -6,16 +6,14 @@
 
 #include "VFLWrapper.h"
 
-#include <stdio.h>
-
-//define
+	//define
 #define sizeof_u32 4
 #define sizeof_u64 8
 	
 #define KB (1024)
 #define MB (1024 * KB)
 	
-//FTL CORE
+		//FTL CORE
 #define NUM_FTL_CORE 2
 #define THIS_CORE (_COREID_ - 1) //should be changed into variable
 	
@@ -31,43 +29,46 @@
 #define PAGES_PER_BLK RSP_PAGE_PER_BLOCK
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
-//test
-//#define BLKS_PER_PLANE (96)
+	//test
+//#define BLKS_PER_PLANE (128)
 #define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
 #define BANKS_PER_CHANNEL RSP_NUM_BANK
 #define	NAND_NUM_CHANNELS RSP_NUM_CHANNEL
+		//static RSP_UINT32 OP_BLKS = 1024;
+		//for test
 #define NUM_LOGICAL_BLOCK ((110 / NUM_FTL_CORE) * 1024)
 
-static RSP_UINT32 OP_BLKS = 7264;
-static RSP_UINT32 NUM_LBLK;
-static RSP_UINT32 NUM_PBLK;
-static RSP_UINT32 CMT_size = 128 * KB; //2MB
+#define IS_DFTL (1) //FPM on off, when the FPM, CMT size must be 72MB
+#define IS_INCGC (1) //incremental GC on off
+#define NUM_READ_PER_INCGC 8
+
+		static RSP_UINT32 OP_BLKS = 7264;
+		static RSP_UINT32 NUM_LBLK;
+		static RSP_UINT32 NUM_PBLK;
+		static RSP_UINT32 CMT_size = 72 * MB; //2MB
 	
-//Mapping data
+		//Mapping data
 	
-#define NUM_MAP_ENTRY (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE / (MAP_ENTRY_SIZE / sizeof_u32))
+#define NUM_MAP_ENTRY ((NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE + (MAP_ENTRY_SIZE / sizeof_u32) - 1) / (MAP_ENTRY_SIZE / sizeof_u32))
 #define NUM_MAP_ENTRY_BLK ((NUM_MAP_ENTRY + PAGES_PER_BLK - 1) / PAGES_PER_BLK)
-#define MAP_ENTRY_BLK_PER_BANK ((NUM_MAP_ENTRY_BLK + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) + 3)
+#define MAP_ENTRY_BLK_PER_BANK ((NUM_MAP_ENTRY_BLK + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) + 5)
 #define TOTAL_MAP_BLK (MAP_ENTRY_BLK_PER_BANK * (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS))
 #define MAP_ENTRY_SIZE (BYTES_PER_SUPER_PAGE)
 #define NUM_MAP_ENTRY_PER_BANK ((NUM_MAP_ENTRY + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS))
 #define NUM_PAGES_PER_MAP (MAP_ENTRY_SIZE / sizeof_u32)
 	
-#define TRUE 1
-#define FALSE 0
-	
 #define OP_BLKS_PER_BANK OP_BLKS / (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)
 #define PAGES_PER_BANK (PAGES_PER_BLK * BLKS_PER_PLANE * PLANES_PER_BANK)
-
-// Logical area layout
-// |------user data-------|-SUPERBLKPAGE-|---JN_LOG---|---RW_LOG---|--SP_CMD--|
-// REMARKS:: SP_CMD is not a portion of LBLK
-
-//VPN layout
-// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
+	
+		// Logical area layout
+		// |------user data-------|-SUPERBLKPAGE-|---JN_LOG---|---RW_LOG---|--SP_CMD--|
+		// REMARKS:: SP_CMD is not a portion of LBLK
+	
+		//VPN layout
+		// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
 	
 #define RW_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define RW_LOG_START_IN_PAGE (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE - RW_LOG_SIZE_IN_PAGE)
@@ -106,233 +107,230 @@ static RSP_UINT32 CMT_size = 128 * KB; //2MB
 	//At this point, we need to change WRITE_TYPE_NUM into WRITE_TYPE_BITS 2, and pluse WRITE_BUFFER_BIT.
 #define WRITE_TYPE_NUM 3
 
-enum ReadState{
-	ReadWriteBuffer,
-	ReadError,
-	ReadNand,
-};
+	struct block_struct{
 
-//Profile data
-enum{
-//SW
-	Prof_SW_write = 0,
-	Prof_SW_read,
-	Prof_SW_Null_read,
-	Prof_SW_buf_read,
-	Prof_SW_modify_read,
-	Prof_SW_modify_buf_write,
-	Prof_SW_map_load,
-	Prof_SW_map_log,
-	Prof_SW_block_alloc,
-	
-//RW
-	Prof_RW_write,
-	Prof_RW_read,
-	Prof_RW_Null_read,
-	Prof_RW_buf_read,
-	Prof_RW_modify_read,
-	Prof_RW_modify_buf_write,
-	Prof_RW_map_load,
-	Prof_RW_map_log,
-	Prof_RW_block_alloc,
-	Prof_RW_Remap_cnt,
-	Prof_RW_Remap_entry,
-	Prof_RW_Remap_map_load,
-	Prof_RW_Remap_map_log,
-	Prof_RW_twrite_cnt,
-	
-//JN
-	Prof_JN_write,
-	Prof_JN_read,
-	Prof_JN_Null_read,
-	Prof_JN_buf_read,
-	Prof_JN_modify_read,
-	Prof_JN_modify_buf_write,
-	Prof_JN_map_load,
-	Prof_JN_map_log,
-	Prof_JN_block_alloc,
-	Prof_JN_Remap_cnt,
-	Prof_JN_Remap_entry,
-	Prof_JN_Remap_map_load,
-	Prof_JN_Remap_map_log,
-	Prof_JN_twrite_cnt,
+		block_struct* next;
+		block_struct* before;
+		RSP_UINT32 block_no;
+		RSP_UINT32 vcount;
+		RSP_UINT32 remained_remap_cnt;
+	};
 
-//Intra_GC
-	Prof_IntraGC_num,
-	Prof_IntraGC_write,
-	Prof_IntraGC_read,
-	Prof_IntraGC_map_load,
-	Prof_IntraGC_map_log,
-	Prof_IntraGC_erase,
+	struct block_struct_head
+	{
+		RSP_UINT32 size;
+		block_struct* head;
+	};
 
-//Inter_GC
-	Prof_InterGC_num,
-	Prof_InterGC_write,
-	Prof_InterGC_read,
-	Prof_InterGC_map_load,
-	Prof_InterGC_map_log,
-	Prof_InterGC_erase,
-	
-//Map_manage	
-	Prof_map_hit,
-	Prof_map_miss,
-	Prof_map_erase,
+	enum WRITE_TYPE{
+		SHRD_SW,
+		SHRD_RW,
+		SHRD_JN,
+		SHRD_JN_SP  //SHRD_JN_SP is not included in the WRITE_TYPE_NUM because this is only used for the indicator. (checkpoint)
+	};
 
-//Flush
-	Prof_num_flush,
-	Prof_meta_flush,
-	Prof_meta_erase,
-	Prof_map_flush,
-	Prof_SW_flush,
-	Prof_RW_flush,
-	Prof_JN_flush,
+	struct NAND_bankstat
+	{
+		RSP_UINT32 GC_BLK;
 
-//ETC	
-	Prof_Init_erase,
-	Prof_total_num,
-	
-};
-enum{
-	Prof_SW = 0,
-	Prof_RW,
-	Prof_JN,
-	Prof_JN_remap,
-	Prof_RW_remap,
-	Prof_IntraGC,
-	Prof_InterGC,
-};
-struct block_struct{
+		RSP_UINT32 cur_write_vpn;
+		RSP_UINT32 cur_write_vpn_JN;
+		RSP_UINT32 cur_write_vpn_RW;
 
-	block_struct* next;
-	block_struct* before;
-	RSP_UINT32 block_no;
-	RSP_UINT32 vcount;
-	RSP_UINT32 remained_remap_cnt;
-};
+		//for incremental GC
+		RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX (super block level 32KB page)
+		RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX (nrumal block levl, 8KB page)
+		RSP_UINT32 num_gcbuffed_valid_page;  //need to count the number of buffered valid page to keep up there remainings, if the write happened, then reduce it
+		RSP_UINT32 cur_gcbuff_idx;
 
-struct block_struct_head
-{
-	RSP_UINT32 size;
-	block_struct* head;
-};
+		RSP_UINT32 cur_map_vpn;
+		RSP_UINT32 MAP_GC_BLK;
+		RSP_UINT32 map_free_blk;
+		RSP_UINT32 cur_meta_vpn;
+		RSP_UINT32 meta_blk;
+		RSP_UINT32* cpybuf_addr;
+		RSP_UINT32* GCbuf_addr;
+		RSP_UINT32 GCbuf_index;
+		RSP_UINT32 GCbuf_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
+		RSP_UINT32* writebuf_addr[WRITE_TYPE_NUM][PLANES_PER_BANK];
+		RSP_UINT16 writebuf_addr_bitmap[WRITE_TYPE_NUM][PLANES_PER_BANK];
+		RSP_UINT32 writebuf_index[WRITE_TYPE_NUM];
+		RSP_UINT8 writebuf_bitmap[WRITE_TYPE_NUM];
+		RSP_UINT32 writebuf_lpn[WRITE_TYPE_NUM][PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
+		RSP_BOOL write_start[WRITE_TYPE_NUM];
+		RSP_BOOL map_start;
+		RSP_BOOL meta_start;
 
-enum WRITE_TYPE{
-	SHRD_SW,
-	SHRD_RW,
-	SHRD_JN,
-	SHRD_JN_SP  //SHRD_JN_SP is not included in the WRITE_TYPE_NUM because this is only used for the indicator. (checkpoint)
-};
+		RSP_UINT32 remap_inbuff_cnt;
 
-struct NAND_bankstat
-{
-	RSP_UINT32 GC_BLK;
+		block_struct* block_list;
+		block_struct_head free_list;
+		block_struct_head JN_log_list;
+		block_struct_head JN_todo_list;
+		block_struct_head data_list;
+		block_struct_head RW_log_list;
+		block_struct_head victim_list;
+	};
 
-	RSP_UINT32 cur_write_vpn;
-	RSP_UINT32 cur_write_vpn_JN;
-	RSP_UINT32 cur_write_vpn_RW;
+	struct TWRITE_HDR_ENTRY
+	{
+		RSP_UINT32 addr_start;
+		RSP_UINT32 io_count;
+		RSP_UINT32 o_addr[NUM_MAX_TWRITE_ENTRY];
+		RSP_BOOL write_complete[NUM_MAX_TWRITE_ENTRY]; //it is not necessary for the scheme but useful for debug
+		RSP_UINT32 epoch;
+		RSP_UINT32 remained;
+		TWRITE_HDR_ENTRY* next;
+		TWRITE_HDR_ENTRY* before;
 
-	//for incremental GC
-	RSP_UINT32 cur_gc_vpn;  //if there are no GC block, then VC_MAX (super block level 32KB page)
-	RSP_UINT32 cur_vt_vpn;  //if there are no victim, then VC_MAX (nrumal block levl, 8KB page)
-	RSP_UINT32 num_gcbuffed_valid_page;  //need to count the number of buffered valid page to keep up there remainings, if the write happened, then reduce it
-	RSP_UINT32 cur_gcbuff_idx;
-
-	RSP_UINT32 cur_map_vpn;
-	RSP_UINT32 MAP_GC_BLK;
-	RSP_UINT32 map_free_blk;
-	RSP_UINT32 cur_meta_vpn;
-	RSP_UINT32 meta_blk;
-	RSP_UINT32* cpybuf_addr;
-	RSP_UINT32* GCbuf_addr;
-	RSP_UINT32 GCbuf_index;
-	RSP_UINT32 GCbuf_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
-	RSP_UINT32* writebuf_addr[WRITE_TYPE_NUM][PLANES_PER_BANK];
-	RSP_UINT16 writebuf_addr_bitmap[WRITE_TYPE_NUM][PLANES_PER_BANK];
-	RSP_UINT32 writebuf_index[WRITE_TYPE_NUM];
-	RSP_UINT8 writebuf_bitmap[WRITE_TYPE_NUM];
-	RSP_UINT32 writebuf_lpn[WRITE_TYPE_NUM][PLANES_PER_BANK][LPAGE_PER_PPAGE][NUM_SPARE_LPN];
-	RSP_BOOL write_start[WRITE_TYPE_NUM];
-	RSP_BOOL map_start;
-	RSP_BOOL meta_start;
-
-	RSP_UINT32 remap_inbuff_cnt;
-
-	block_struct* block_list;
-	block_struct_head free_list;
-	block_struct_head JN_log_list;
-	block_struct_head JN_todo_list;
-	block_struct_head data_list;
-	block_struct_head RW_log_list;
-	block_struct_head victim_list;
-};
-
-struct TWRITE_HDR_ENTRY
-{
-	RSP_UINT32 addr_start;
-	RSP_UINT32 io_count;
-	RSP_UINT32 o_addr[NUM_MAX_TWRITE_ENTRY];
-	RSP_BOOL write_complete[NUM_MAX_TWRITE_ENTRY]; //it is not necessary for the scheme but useful for debug
-	RSP_UINT32 epoch;
-	RSP_UINT32 remained;
-	TWRITE_HDR_ENTRY* next;
-	TWRITE_HDR_ENTRY* before;
-
-}; //it is not actually 4KB
+	}; //it is not actually 4KB
 
 #define TWRITE_HDR_BYTE_SIZE ((NUM_MAX_TWRITE_ENTRY + 2) * sizeof(RSP_UINT32))
 
-struct REMAP_HDR_ENTRY
-{
-	RSP_UINT32 remap_count;
-	RSP_UINT32 t_addr[NUM_MAX_REMAP_ENTRY]; //need to recalculate addr 
-	RSP_UINT32 o_addr[NUM_MAX_REMAP_ENTRY];
-	RSP_UINT32 epoch;
-	RSP_UINT8 remap_offset; //store remap entry number with given LPN on write and be used for confirm-read cmd
-	REMAP_HDR_ENTRY* next;
-	REMAP_HDR_ENTRY* before;
-}; //4KB entry
+	struct REMAP_HDR_ENTRY
+	{
+		RSP_UINT32 remap_count;
+		RSP_UINT32 t_addr[NUM_MAX_REMAP_ENTRY]; //need to recalculate addr 
+		RSP_UINT32 o_addr[NUM_MAX_REMAP_ENTRY];
+		RSP_UINT32 epoch;
+		RSP_UINT8 remap_offset; //store remap entry number with given LPN on write and be used for confirm-read cmd
+		REMAP_HDR_ENTRY* next;
+		REMAP_HDR_ENTRY* before;
+	}; //4KB entry
 
 #define REMAP_HDR_BYTE_SIZE ((NUM_MAX_REMAP_ENTRY * 2 + 3) * sizeof(RSP_UINT32))
 
-struct CONFIRM_READ_ENTRY{
-	RSP_UINT32 complete[NUM_MAX_REMAP_ENTRY];
-};
+	struct CONFIRM_READ_ENTRY{
+		RSP_UINT32 complete[NUM_MAX_REMAP_ENTRY];
+	};
 
-struct TWRITE_HDR_LIST
-{
-	RSP_UINT32 size;
-	TWRITE_HDR_ENTRY *head;
-};
-struct REMAP_HDR_LIST
-{
-	RSP_UINT32 size;
-	REMAP_HDR_ENTRY *head;
-};
+	struct TWRITE_HDR_LIST
+	{
+		RSP_UINT32 size;
+		TWRITE_HDR_ENTRY *head;
+	};
+	struct REMAP_HDR_LIST
+	{
+		RSP_UINT32 size;
+		REMAP_HDR_ENTRY *head;
+	};
 
-static RSP_UINT32 NULL_SPARE[4] = {
-	RSP_INVALID_LPN,
-	RSP_INVALID_LPN,
-	RSP_INVALID_LPN,
-	RSP_INVALID_LPN
-};
+	static RSP_UINT32 NULL_SPARE[4] = {
+		RSP_INVALID_LPN,
+		RSP_INVALID_LPN,
+		RSP_INVALID_LPN,
+		RSP_INVALID_LPN
+	};
 	
 namespace Hesper{
 
+#define RSP_ASSERT(bCondition) if (!(bCondition)) {while(1);}
+//#define RSP_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT!!");while(1);}
 	
+	enum ReadState{
+		ReadWriteBuffer,
+		ReadError,
+		ReadNand,
+	};
 
-	
-#define RSP_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT!!");while(1);}
+	//Profile data
+	enum{
+	//SW
+		Prof_SW_write = 0,
+		Prof_SW_read,
+		Prof_SW_Null_read,
+		Prof_SW_buf_read,
+		Prof_SW_modify_read,
+		Prof_SW_modify_buf_write,
+		Prof_SW_map_load,
+		Prof_SW_map_log,
+		Prof_SW_block_alloc,
+		
+	//RW
+		Prof_RW_write,
+		Prof_RW_read,
+		Prof_RW_Null_read,
+		Prof_RW_buf_read,
+		Prof_RW_modify_read,
+		Prof_RW_modify_buf_write,
+		Prof_RW_map_load,
+		Prof_RW_map_log,
+		Prof_RW_block_alloc,
+		Prof_RW_Remap_cnt,
+		Prof_RW_Remap_entry,
+		Prof_RW_Remap_map_load,
+		Prof_RW_Remap_map_log,
+		Prof_RW_twrite_cnt,
+		
+	//JN
+		Prof_JN_write,
+		Prof_JN_read,
+		Prof_JN_Null_read,
+		Prof_JN_buf_read,
+		Prof_JN_modify_read,
+		Prof_JN_modify_buf_write,
+		Prof_JN_map_load,
+		Prof_JN_map_log,
+		Prof_JN_block_alloc,
+		Prof_JN_Remap_cnt,
+		Prof_JN_Remap_entry,
+		Prof_JN_Remap_map_load,
+		Prof_JN_Remap_map_log,
+		Prof_JN_twrite_cnt,
+
+	//Intra_GC
+		Prof_IntraGC_num,
+		Prof_IntraGC_write,
+		Prof_IntraGC_read,
+		Prof_IntraGC_map_load,
+		Prof_IntraGC_map_log,
+		Prof_IntraGC_erase,
+
+	//Inter_GC
+		Prof_InterGC_num,
+		Prof_InterGC_write,
+		Prof_InterGC_read,
+		Prof_InterGC_map_load,
+		Prof_InterGC_map_log,
+		Prof_InterGC_erase,
+		
+	//Map_manage	
+		Prof_map_hit,
+		Prof_map_miss,
+		Prof_map_erase,
+
+	//Flush
+		Prof_num_flush,
+		Prof_meta_flush,
+		Prof_meta_erase,
+		Prof_map_flush,
+		Prof_SW_flush,
+		Prof_RW_flush,
+		Prof_JN_flush,
+
+	//ETC	
+		Prof_Init_erase,
+		Prof_total_num,
+		
+	};
+	enum{
+		Prof_SW = 0,
+		Prof_RW,
+		Prof_JN,
+		Prof_JN_remap,
+		Prof_RW_remap,
+		Prof_IntraGC,
+		Prof_InterGC,
+	};
 
 	class ATLWrapper
 	{
 	public:
 
 		VFLWrapper* m_pVFLWrapper;
+		NAND_bankstat *NAND_bank_state[NAND_NUM_CHANNELS];
 
-		//dbg
-		RSP_UINT32 dbg_inter_gc_cnt = 0;
-
-		//DRAM MAP cache
+//DRAM MAP cache
 		RSP_UINT32 NUM_CACHED_MAP;
 		RSP_UINT32* CACHE_MAPPING_TABLE;
 		RSP_UINT32* CACHE_ADDR;
@@ -346,9 +344,6 @@ namespace Hesper{
 		//Map Management
 		RSP_UINT32 num_cached;
 
-		//Bank status
-		NAND_bankstat* NAND_bank_state[NAND_NUM_CHANNELS];
-
 		//currently write bank number (include channel in it)
 		//e.g. 0 means channel 0 bank 0, 1 means channel 1 bank 0, etc.
 		RSP_UINT32	cur_write_bank;
@@ -356,14 +351,10 @@ namespace Hesper{
 #define inc_cur_write_bank() {cur_write_bank++; if(cur_write_bank == (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)){cur_write_bank = 0;}}
 #define cur_gc_bank() {(cur_write_bank + (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL) / 2) % (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL)}
 #define GC_THRESHOLD 8
-#define NUM_READ_PER_INCGC 2
+
 
 		TWRITE_HDR_ENTRY *twrite_hdr_entry;
 		REMAP_HDR_ENTRY *remap_hdr_entry;
-
-#define NUM_WRITEBUF_ENTRY 1280
-		RSP_UINT32 **Temp_writebuf;
-		RSP_UINT32 Temp_writebuf_idx;
 
 #define init_cmd_list(list) do{\
 	list.size = 0; \
@@ -382,8 +373,6 @@ namespace Hesper{
 #define MAX_EPOCH_NUMBER 65536
 		RSP_UINT32 epoch_number[WRITE_TYPE_NUM];
 
-		RSP_UINT32 after_gc = 0;
-
 		//for simulator
 		RSP_UINT32 _COREID_;
 		ATLWrapper(VFLWrapper *pVFL, RSP_UINT32 COREID); //overloading function for simulator
@@ -392,7 +381,6 @@ namespace Hesper{
 		ATLWrapper(VFLWrapper* pVFL);
 		virtual ~ATLWrapper(RSP_VOID);
 
-		RSP_UINT32 *get_tempbuf(RSP_VOID);
 		RSP_VOID map_read(RSP_UINT32 map_offset, RSP_UINT32 cache_offset);
 		RSP_VOID map_write(RSP_UINT32 map_offset, RSP_UINT32 cache_offset);
 		RSP_UINT32 get_map_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
@@ -474,8 +462,20 @@ namespace Hesper{
 		RSP_VOID flush_bank(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_VOID write_buffer_flush(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT8 WRITE_TYPE);
 		RSP_VOID test_NAND_list();
-		
-		
+
+		RSP_BOOL Issue(RSPProgramOp* RSPOp);
+		RSP_BOOL MetaIssue(RSPProgramOp* RSPOp);
+		RSP_BOOL Issue(RSPReadOp RSPOp);
+		RSP_BOOL MetaIssue(RSPReadOp RSPOp);
+		RSP_BOOL Issue(RSPEraseOp* RSPOp);
+
+		RSP_BOOL WAIT_PROGRAMPENDING();
+
+		RSP_BOOL WAIT_ERASEPENDING();
+
+		RSP_BOOL WAIT_READPENDING();
+
+		RSP_UINT32 map_validation_check();
 		RSP_UINT32 map_vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_UINT32 vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		
