@@ -52,9 +52,6 @@ void SHRD_host::do_twrite(RSP_UINT32 max_packed_rw) {
 
 		LPN = (rand() * rand()) % LPN_RANGE;
 
-		if (LPN == 35302)
-			printf("!!");
-
 		page_count = 1; //it can be varied.
 		req_pages += page_count;
 

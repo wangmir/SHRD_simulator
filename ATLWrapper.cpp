@@ -149,8 +149,9 @@ namespace Hesper{
 			{
 				NAND_bank_state[channel][bank].block_list = (block_struct *)rspmalloc(sizeof(block_struct)* BLKS_PER_BANK);
 				for (loop = 0; loop < BLKS_PER_BANK; loop++){
+					RSPOSAL::RSP_MemSet(&NAND_bank_state[channel][bank].block_list[loop], 0x00, sizeof(block_struct));
 					NAND_bank_state[channel][bank].block_list[loop].block_no = loop;
-					NAND_bank_state[channel][bank].block_list[loop].remained_remap_cnt = 0;
+					//NAND_bank_state[channel][bank].block_list[loop].remained_remap_cnt = 0;
 				}
 				NAND_bank_state[channel][bank].free_list.size = 0;
 				NAND_bank_state[channel][bank].JN_log_list.size = 0;
@@ -948,27 +949,6 @@ namespace Hesper{
 		}
 	}
 
-	RSP_VOID ATLWrapper::switch_JN_todo_log(RSP_VOID){
-
-		for (RSP_UINT32 channel = 0; channel < NAND_NUM_CHANNELS; channel++){
-			for (RSP_UINT32 bank = 0; bank < BANKS_PER_CHANNEL; bank++){
-				block_struct_head *list = &NAND_bank_state[channel][bank].JN_todo_list;
-				RSP_UINT32 block_no;
-				while (list->size){
-					block_no = list->head->block_no;
-					del_blk_from_list(channel, bank, block_no, &NAND_bank_state[channel][bank].JN_todo_list);
-					insert_bl_tail(channel, bank, block_no, &NAND_bank_state[channel][bank].data_list);
-				}
-			}
-		}
-		for (RSP_UINT32 channel = 0; channel < NAND_NUM_CHANNELS; channel++){
-			for (RSP_UINT32 bank = 0; bank < BANKS_PER_CHANNEL; bank++){
-				write_buffer_flush(channel, bank, SHRD_SW);
-			}
-		}
-		meta_flush();
-	}
-
 	RSP_VOID ATLWrapper::__do_remap(RSP_UINT8 REMAP_TYPE){
 	
 		REMAP_HDR_LIST* remap_list = (REMAP_TYPE == SHRD_RW) ? &RW_remap_list : &JN_remap_list;
@@ -1120,6 +1100,7 @@ namespace Hesper{
 					//if the previous data is in the GC buffer, we must invalidate it
 					check_n_invalid_GCbuff(old_channel, old_bank, entry->o_addr[remap_cnt] / NUM_FTL_CORE, old_block);
 #endif
+					invalidate_vpn(old_vpn);
 					set_vcount(old_channel, old_bank, old_block, get_vcount(old_channel, old_bank, old_block) - 1);
 				}
 			}
@@ -1210,8 +1191,6 @@ namespace Hesper{
 			if (LPN[loop] < RSP_INVALID_LPN)
 			{
 				RSP_UINT8 write_type = SHRD_SW;
-				if (LPN[loop] == JN_SUPERBLK_PAGE_IDX)
-					write_type = SHRD_JN_SP;
 				if (LPN[loop] >= JN_LOG_START_IN_PAGE){
 
 					if (LPN[loop] >= CONFIRM_READ_CMD_IN_PAGE){
@@ -1244,9 +1223,7 @@ namespace Hesper{
 				if(!ret){
 					buff_cnt++;
 				}
-			
-				if (write_type == SHRD_JN_SP)
-					switch_JN_todo_log();
+				
 				else if (write_type != SHRD_SW){
 					if (twrite_entry->remained == 0){
 						//do_remap(write_type);
@@ -1353,10 +1330,11 @@ namespace Hesper{
 			{
 				if (old_vpn % LPAGE_PER_PPAGE)
 					vpage_offset = 1;
-				old_vpn = (old_vpn / LPAGE_PER_PPAGE) % PAGES_PER_BANK; //8KB page in bank
+				
 				if (!(SectorBitmap == 0xff) && !(SectorBitmap == 0xff00))
 				{ //Read Modify
-				
+					RSP_UINT32 in_bank_vpn = (old_vpn / LPAGE_PER_PPAGE) % PAGES_PER_BANK; //8KB page in bank
+					
 					if (vpage_offset)
 						RSP_read_op.pData = (RSP_UINT32 *)sub_addr(BufferAddress, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
 					else
@@ -1365,8 +1343,8 @@ namespace Hesper{
 					RSP_read_op.nReqID = RSP_INVALID_RID;
 					RSP_read_op.nChannel = (RSP_UINT8) old_channel;
 					RSP_read_op.nBank = (RSP_UINT8) old_bank;
-					RSP_read_op.nBlock = (RSP_UINT16) get_block(old_vpn);
-					RSP_read_op.nPage = get_page_offset(old_vpn);
+					RSP_read_op.nBlock = (RSP_UINT16) get_block(in_bank_vpn);
+					RSP_read_op.nPage = get_page_offset(in_bank_vpn);
 					if (SectorBitmap >> RSP_SECTOR_PER_LPN){
 						if (vpage_offset)
 						RSP_read_op.bmpTargetSector = (~SectorBitmap) & 0xff00;
@@ -1402,6 +1380,7 @@ namespace Hesper{
 				//if the previous page is in the GC buffer for inc GC, then invalid the buffer
 				check_n_invalid_GCbuff(old_channel, old_bank, lpn, block);
 #endif	
+				invalidate_vpn(old_vpn);
 				set_vcount(old_channel, old_bank, block, get_vcount(old_channel, old_bank, block) - 1);
 
 				//when the twrite data is overwritten before remap, it will not remapped, so decrease remained remap cnt
@@ -1545,6 +1524,7 @@ namespace Hesper{
 						//20150831
 						if(NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane][buf_offset][REQ_LPN] != RSP_INVALID_LPN){
 							set_vpn(NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane][buf_offset][REQ_LPN], plane_ppn[buf_offset], WRITE_TYPE);
+							validate_vpn(plane_ppn[buf_offset]);
 							vcount++;
 							RSP_ASSERT(NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane][buf_offset][REQ_LPN] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 							RSP_ASSERT(plane_ppn[buf_offset] < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || plane_ppn[buf_offset] == VC_MAX || is_in_write_buffer(plane_ppn[buf_offset]));
@@ -1632,6 +1612,8 @@ namespace Hesper{
 		{
 			//GC occured
 			block = get_free_block(channel, bank);
+			if (block == VC_MAX)
+				RSP_ASSERT(0);
 			m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_block_alloc, 1);
 			if (!block)
 			{
@@ -2090,6 +2072,44 @@ namespace Hesper{
 		NAND_bank_state[channel][bank].block_list[block].vcount = vcount;
 		return;
 	}
+
+	RSP_BOOL ATLWrapper::is_valid_vpn(RSP_UINT32 vpn){
+		
+		RSP_UINT32 channel, bank, block, offset;
+		
+		channel = get_channel_from_vpn(vpn);
+		bank = get_bank_from_vpn(vpn);
+		block = get_super_block(vpn % (PAGES_PER_BANK * LPAGE_PER_PPAGE));
+		offset = vpn % (PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+
+		return get_bit(NAND_bank_state[channel][bank].block_list[block].vbitmap, offset);
+	}
+
+	RSP_VOID ATLWrapper::validate_vpn(RSP_UINT32 vpn){
+
+		RSP_UINT32 channel, bank, block, offset;
+
+		channel = get_channel_from_vpn(vpn);
+		bank = get_bank_from_vpn(vpn);
+		block = get_super_block(vpn % (PAGES_PER_BANK * LPAGE_PER_PPAGE));
+		offset = vpn % (PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+
+		set_bit(NAND_bank_state[channel][bank].block_list[block].vbitmap, offset);
+		set_bit(dirty_BBP_bitmap, block_to_BBPN(channel, bank, block));
+	}
+	RSP_VOID ATLWrapper::invalidate_vpn(RSP_UINT32 vpn){
+		
+		RSP_UINT32 channel, bank, block, offset;
+
+		channel = get_channel_from_vpn(vpn);
+		bank = get_bank_from_vpn(vpn);
+		block = get_super_block(vpn % (PAGES_PER_BANK * LPAGE_PER_PPAGE));
+		offset = vpn % (PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE);
+
+		clear_bit(NAND_bank_state[channel][bank].block_list[block].vbitmap, offset);
+		set_bit(dirty_BBP_bitmap, block_to_BBPN(channel, bank, block));
+	}
+	
 	//GC
 	/////////////////////////////////////////////////////////////////////////////
 	RSP_VOID ATLWrapper::garbage_collection(RSP_UINT32 channel, RSP_UINT32 bank)
@@ -2116,6 +2136,13 @@ namespace Hesper{
 		{
 			for (plane = 0; plane < PLANES_PER_BANK; plane++)
 			{
+				RSP_UINT32 vpn = vt_block * PLANES_PER_BANK * PAGES_PER_BLK + plane * PAGES_PER_BLK + src_page;
+				vpn += ((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK);
+
+				//read valid page only
+				if(!(is_valid_vpn(vpn * LPAGE_PER_PPAGE) || is_valid_vpn(vpn * LPAGE_PER_PPAGE + 1)))
+					continue;
+			
 				for (high_low = 0; high_low < LPAGE_PER_PPAGE; high_low++)
 				{
 					if (!high_low){
@@ -2188,6 +2215,7 @@ namespace Hesper{
 								{
 									plane_ppn[buf_offset] = (((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK) + super_blk * PLANES_PER_BANK * PAGES_PER_BLK + write_plane * PAGES_PER_BLK + new_vpn % PAGES_PER_BLK) * LPAGE_PER_PPAGE + buf_offset;
 									set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[write_plane][buf_offset][REQ_LPN], plane_ppn[buf_offset], Prof_IntraGC);
+									validate_vpn(plane_ppn[buf_offset]);
 								}
 
 								RSP_write_ops[write_plane].pData = (RSP_UINT32*)add_addr(NAND_bank_state[channel][bank].GCbuf_addr, write_plane * RSP_BYTES_PER_PAGE);
@@ -2245,6 +2273,7 @@ namespace Hesper{
 					if (plane * LPAGE_PER_PPAGE + buf_offset < to_write)
 					{
 						set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[plane][buf_offset][REQ_LPN], plane_ppn[buf_offset], Prof_IntraGC);
+						validate_vpn(plane_ppn[buf_offset]);
 						plane_lpn[buf_offset] = NAND_bank_state[channel][bank].GCbuf_lpn[plane][buf_offset][REQ_LPN];
 					}
 					else{
@@ -2323,10 +2352,19 @@ namespace Hesper{
 			for (int page_iter = 0; page_iter < PAGES_PER_BLK; page_iter++){
 				//plane level iterator
 				for (int plane_iter = 0; plane_iter < PLANES_PER_BANK; plane_iter++){
+
+					RSP_UINT32 vpn = vt_block * PLANES_PER_BANK * PAGES_PER_BLK + plane_iter * PAGES_PER_BLK + page_iter;
+					vpn += ((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK);
+
+					//read valid page only
+					if(!(is_valid_vpn(vpn * LPAGE_PER_PPAGE) || is_valid_vpn(vpn * LPAGE_PER_PPAGE + 1)))
+						continue;
+					
 					for (int high_low_iter = 0; high_low_iter < LPAGE_PER_PPAGE; high_low_iter++){
 						old_vpn = vt_block * PLANES_PER_BANK * PAGES_PER_BLK + plane_iter * PAGES_PER_BLK + page_iter;
 
 						if (!high_low_iter){
+							
 							RSP_read_op.pData = (RSP_UINT32 *)add_addr(
 								NAND_bank_state[channel][bank].GCbuf_addr,
 								NAND_bank_state[channel][bank].GCbuf_index * (RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE));
@@ -2405,6 +2443,7 @@ namespace Hesper{
 											+ cpy_plane_iter * PAGES_PER_BLK
 											+ free_vpn_idx % PAGES_PER_BLK) * LPAGE_PER_PPAGE + buf_offset_iter;
 										set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN], plane_ppn[buf_offset_iter], Prof_InterGC);
+										validate_vpn(plane_ppn[buf_offset_iter]);
 									}
 
 									RSP_write_ops[cpy_plane_iter].pData = (RSP_UINT32*)add_addr(NAND_bank_state[channel][bank].GCbuf_addr, cpy_plane_iter * RSP_BYTES_PER_PAGE);
@@ -2469,6 +2508,7 @@ namespace Hesper{
 						if (plane_iter * LPAGE_PER_PPAGE + buf_offset_iter < to_write)
 						{
 							set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[plane_iter][buf_offset_iter][REQ_LPN], plane_ppn[buf_offset_iter], Prof_InterGC);
+							validate_vpn(plane_ppn[buf_offset_iter]);
 							plane_lpn[buf_offset_iter] = NAND_bank_state[channel][bank].GCbuf_lpn[plane_iter][buf_offset_iter][REQ_LPN];
 						}
 						else{
@@ -2548,9 +2588,8 @@ namespace Hesper{
 					return ret;
 			}
 		}
-		else
-			return 0;
-		RSP_ASSERT(0);
+		return 0;
+
 	}
 
 	RSP_VOID ATLWrapper::decrease_vcount_of_vt_block(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 count) {
@@ -2686,6 +2725,7 @@ namespace Hesper{
 				if (NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN] != RSP_INVALID_LPN) {
 					valid_count++;
 					set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN], plane_ppn[buf_offset_iter], Prof_InterGC);
+					validate_vpn(plane_ppn[buf_offset_iter]);
 					RSP_ASSERT(NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 					RSP_ASSERT(plane_ppn[buf_offset_iter] < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || plane_ppn[buf_offset_iter] == VC_MAX || is_in_write_buffer(plane_ppn[buf_offset_iter]));
 				}
@@ -2801,15 +2841,6 @@ namespace Hesper{
 		RSP_UINT32 *gc_buff;
 		RSP_UINT32 num_write = 0;
 
-		//if (dbg_inter_gc_cnt % 100000 == 0) {
-		//	
-		//	for (RSP_UINT32 channel_iter = 0; channel_iter < RSP_NUM_CHANNEL; channel_iter++)
-		//		for (RSP_UINT32 bank_iter = 0; bank_iter < BANKS_PER_CHANNEL; bank_iter++)
-		//			for (RSP_UINT32 block_iter = 0; block_iter < BLKS_PER_PLANE; block_iter++)
-		//				vcount_test(channel_iter, bank_iter, block_iter);
-
-		//}
-
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_num, 1);
 
 		//there are full invalid block to erase (copy over)
@@ -2854,9 +2885,23 @@ namespace Hesper{
 		}
 
 		if(NAND_bank_state[channel][bank].num_gcbuffed_valid_page < vcount){
-			
-			read_victim_page(channel, bank, vt_vpn_idx, spare_lpn, is_valid);
-			vt_vpn_idx++;
+
+			while(1){
+				//read only when the vpn has valid data
+				RSP_UINT32 vpn = vt_vpn_idx + ((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK);
+				
+				//read valid page only
+				if(is_valid_vpn(vpn * LPAGE_PER_PPAGE) || is_valid_vpn(vpn * LPAGE_PER_PPAGE + 1)){
+					read_victim_page(channel, bank, vt_vpn_idx, spare_lpn, is_valid);
+					vt_vpn_idx++;
+					break;
+				}
+				else{
+					vt_vpn_idx++;
+					if(vt_vpn_idx / (PAGES_PER_BLK * PLANES_PER_BANK) != vt_block)
+						break;
+				}
+			}
 
 			for (RSP_UINT32 iter = 0; iter < LPAGE_PER_PPAGE; iter++) {
 
@@ -3079,19 +3124,6 @@ do_erase:
 
 	}
 
-	RSP_VOID ATLWrapper::flush(RSP_VOID)
-	{
-		for (RSP_UINT32 channel = 0; channel < NAND_NUM_CHANNELS; channel++){
-			for (RSP_UINT32 bank = 0; bank < BANKS_PER_CHANNEL; bank++){
-				for (RSP_UINT8 write_type = 0; write_type < WRITE_TYPE_NUM; write_type++){
-					write_buffer_flush(channel, bank, write_type);
-				}
-			}
-		}
-		map_flush();
-		meta_flush();
-		m_pVFLWrapper->RSP_INC_ProfileData(Prof_num_flush, 1);
-	}
 	RSP_VOID ATLWrapper::flush_bank(RSP_UINT32 channel, RSP_UINT32 bank)
 	{
 		/*for (RSP_UINT32 write_type = 0; write_type < WRITE_TYPE_NUM; write_type++){
@@ -3099,111 +3131,13 @@ do_erase:
 		}*/
 
 		map_flush();
+		BBP_flush();
+		WAIT_PROGRAMPENDING();
 		bank_meta_flush(channel, bank);
+		WAIT_PROGRAMPENDING();
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_num_flush, 1);
 	}
-
-	RSP_VOID ATLWrapper::write_buffer_flush(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT8 WRITE_TYPE){
-		//be careful about managing vcount and remained_count for blk struct.
-
-		RSPProgramOp RSP_write_ops[PLANES_PER_BANK];
-		RSP_UINT32 new_vpn, plane_ppn[LPAGE_PER_PPAGE], plane_lpn[LPAGE_PER_PPAGE];
-		RSP_UINT32 vcount = 0;
-		RSP_UINT32 idx_iter = 0;
-		RSP_UINT32 super_blk;
-
-		dbg1 = NAND_NUM_CHANNELS;
-		dbg2 = BANKS_PER_CHANNEL;
-		dbg3 = BLKS_PER_PLANE;
-		
-		if(NAND_bank_state[channel][bank].writebuf_bitmap[WRITE_TYPE] == 0x00){
-			return;
-		}
-
-		if (WRITE_TYPE == SHRD_SW)
-			new_vpn = assign_new_write_vpn(channel, bank);
-		else if (WRITE_TYPE == SHRD_RW)
-			new_vpn = assign_new_write_vpn_RW(channel, bank);
-		else
-			new_vpn = assign_new_write_vpn_JN(channel, bank);
-
-		RSP_ASSERT(new_vpn < BLKS_PER_BANK * PAGES_PER_BLK);
-
-		super_blk = new_vpn / PAGES_PER_BLK;
-
-		for (RSP_UINT32 plane_iter = 0; plane_iter < PLANES_PER_BANK; plane_iter++){
-			for (RSP_UINT32 lpage_iter = 0; lpage_iter < LPAGE_PER_PPAGE; lpage_iter++){
-
-				plane_ppn[lpage_iter] = (((channel * BANKS_PER_CHANNEL + bank) * PAGES_PER_BANK) + super_blk * PLANES_PER_BANK * PAGES_PER_BLK + plane_iter * PAGES_PER_BLK + new_vpn % PAGES_PER_BLK) * LPAGE_PER_PPAGE + lpage_iter;
-				plane_lpn[lpage_iter] = RSP_INVALID_LPN;
-				if ((NAND_bank_state[channel][bank].writebuf_bitmap[WRITE_TYPE] >> (plane_iter * LPAGE_PER_PPAGE + lpage_iter)) & 0x1){
-					//writebuf_bitmap checking.
-					vcount++;
-					RSP_ASSERT(NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][lpage_iter][REQ_LPN] != RSP_INVALID_LPN);
-					set_vpn(NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][lpage_iter][REQ_LPN], plane_ppn[lpage_iter], WRITE_TYPE);
-					plane_lpn[lpage_iter] = NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][lpage_iter][REQ_LPN];
-					RSP_ASSERT(NAND_bank_state[channel][bank].writebuf_addr[WRITE_TYPE][plane_iter] != NULL);
-				}
-				else{
-					NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][lpage_iter][REQ_LPN] = RSP_INVALID_LPN;
-					NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][lpage_iter][REMAP_LPN] = RSP_INVALID_LPN;
-				}
-
-			}
-
-			//dbg
-			//dbg_buffflush[dbg_buffflush_ptr] = NAND_bank_state[channel][bank].writebuf_addr[WRITE_TYPE][plane_iter];
-			//dbg_buffflush_ptr++;
-			//dbgend
-
-			RSP_write_ops[plane_iter].pData = NAND_bank_state[channel][bank].writebuf_addr[WRITE_TYPE][plane_iter];
-			RSP_write_ops[plane_iter].pSpareData = NAND_bank_state[channel][bank].writebuf_lpn[WRITE_TYPE][plane_iter][0];
-			RSP_write_ops[plane_iter].nChannel = (RSP_UINT8) channel;
-			RSP_write_ops[plane_iter].bmpTargetSector = NAND_bank_state[channel][bank].writebuf_addr_bitmap[WRITE_TYPE][plane_iter];
-			RSP_write_ops[plane_iter].nBank = (RSP_UINT8) bank;
-			RSP_write_ops[plane_iter].nBlock = (RSP_UINT16) get_block(super_blk * PLANES_PER_BANK * PAGES_PER_BLK + plane_iter * PAGES_PER_BLK + new_vpn % PAGES_PER_BLK);
-			RSP_write_ops[plane_iter].nPage = get_page_offset(super_blk * PLANES_PER_BANK * PAGES_PER_BLK + plane_iter * PAGES_PER_BLK + new_vpn % PAGES_PER_BLK);
-			RSP_write_ops[plane_iter].m_anVPN[0] = plane_ppn[0];
-			RSP_write_ops[plane_iter].m_anVPN[1] = plane_ppn[1];
-			RSP_write_ops[plane_iter].m_anLPN[0] = plane_lpn[0];
-			RSP_write_ops[plane_iter].m_anLPN[1] = plane_lpn[1];
-
-		}
-		m_pVFLWrapper->INC_PROGRAMPENDING();
-		
-		Issue(RSP_write_ops);
-		/*
-		if (WRITE_TYPE == SHRD_RW)
-			Issue(RSP_write_ops);
-		else{
-			MetaIssue(RSP_write_ops);
-		}
-		*/
-		//Issue(RSP_write_ops);
-		WAIT_PROGRAMPENDING();
-
-		//NAND_bank_state[channel][bank].writebuf_index[WRITE_TYPE] = 0;
-		set_vcount(channel, bank, super_blk, get_vcount(channel, bank, super_blk) + vcount);
-
-		NAND_bank_state[channel][bank].writebuf_index[WRITE_TYPE] = 0;
-		NAND_bank_state[channel][bank].writebuf_bitmap[WRITE_TYPE] = 0;
-		
-		for (RSP_UINT8 iter = 0; iter < PLANES_PER_BANK; iter++){
-			NAND_bank_state[channel][bank].writebuf_addr[WRITE_TYPE][iter] = NULL;
-			NAND_bank_state[channel][bank].writebuf_addr_bitmap[WRITE_TYPE][iter] = 0;
-		}
-
-		if(WRITE_TYPE == SHRD_SW)
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_flush, vcount);
-		else if(WRITE_TYPE == SHRD_RW)
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_flush, vcount);
-		else
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_flush, vcount);
-		if (WRITE_TYPE != SHRD_SW){
-			NAND_bank_state[channel][bank].block_list[super_blk].remained_remap_cnt += vcount;
-		}
-	}
-
+	
 	RSP_VOID ATLWrapper::map_flush(RSP_VOID)
 	{
 		RSP_UINT32 loop;
@@ -3222,18 +3156,20 @@ do_erase:
 		}
 	}
 
-	RSP_VOID ATLWrapper::meta_flush(RSP_VOID)
-	{
-		RSP_UINT32 bank,  channel;
+	RSP_VOID ATLWrapper::BBP_flush(RSP_VOID){
 
-		for (channel = 0; channel < NAND_NUM_CHANNELS; channel++)
-		{
-			for (bank = 0; bank < BANKS_PER_CHANNEL; bank++)
-			{
-				bank_meta_flush(channel, bank);
+		RSP_UINT32 loop;
+		RSP_UINT32 bank = cur_write_bank;
+		for (loop = 0; loop < NUM_BBP; loop++){
+			if(get_bit(dirty_BBP_bitmap, loop)){
+				bank_meta_flush(get_channel(bank), get_bank(bank));
+				bank = (bank + 1) % (NAND_NUM_CHANNELS * BANKS_PER_CHANNEL);
 			}
 		}
+
+		RSPOSAL::RSP_MemSet(dirty_BBP_bitmap, 0x00, sizeof(RSP_UINT32) * BITS_TO_LONGS(NUM_BBP));
 	}
+
 	RSP_VOID ATLWrapper::bank_meta_flush(RSP_UINT32 channel, RSP_UINT32 bank)
 	{
 		RSP_UINT32  plane,  block, new_vpn;
@@ -3271,7 +3207,7 @@ do_erase:
 		}
 		m_pVFLWrapper->INC_PROGRAMPENDING();
 		MetaIssue(RSP_write_ops);
-		WAIT_PROGRAMPENDING();
+		//WAIT_PROGRAMPENDING();
 		NAND_bank_state[channel][bank].cur_meta_vpn = (NAND_bank_state[channel][bank].cur_meta_vpn + 1) % PAGES_PER_BLK;
 		NAND_bank_state[channel][bank].meta_start = true;
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_meta_flush, 1);

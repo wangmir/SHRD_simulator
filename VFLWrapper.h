@@ -43,7 +43,7 @@ class VFLWrapper
 	public:
 
 
-#define SMALL_DATA_BLOCK 1
+#define SMALL_DATA_BLOCK 0
 #define VFL_BLOCK_DATA_SIZE (1048576LL)
 #define VFL_SMALL_BLOCK_DATA_SIZE (1024LL)
 #define VFL_BLOCK_OOB_SIZE (2048)
@@ -92,6 +92,15 @@ class VFLWrapper
 		bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
+
+		inline RSP_VOID* add_addr(RSP_VOID* start_addr, RSP_UINT32 offset)
+		{
+			return (RSP_VOID *)((RSP_UINT32)start_addr + offset);
+		}
+		inline RSP_VOID* sub_addr(RSP_VOID* start_addr, RSP_UINT32 offset)
+		{
+			return (RSP_VOID *)((RSP_UINT32)start_addr - offset);
+		}
 };
 
 #endif

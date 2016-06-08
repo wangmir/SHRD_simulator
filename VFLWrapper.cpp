@@ -73,6 +73,7 @@ bool VFLWrapper::Issue(RSPReadOp RSPOp, RSP_UINT32 *dbg){
 
 	if (RSPOp.bmpTargetSector == 0xff00){
 		offset++;
+		RSPOp.pData = (RSP_UINT32 *)add_addr(RSPOp.pData, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
 	}
 
 	RSP_UINT64 seek_block = seek * VFL_BLOCK_DATA_SIZE;

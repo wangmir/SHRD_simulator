@@ -30,8 +30,8 @@
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
 	//test
-//#define BLKS_PER_PLANE (128)
-#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
+#define BLKS_PER_PLANE (96)
+//#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
@@ -48,7 +48,7 @@
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 72 * MB; //2MB
+		static RSP_UINT32 CMT_size = 2 * MB; //2MB
 	
 		//Mapping data
 	
@@ -107,6 +107,14 @@
 	//At this point, we need to change WRITE_TYPE_NUM into WRITE_TYPE_BITS 2, and pluse WRITE_BUFFER_BIT.
 #define WRITE_TYPE_NUM 3
 
+#define DIV_ROUND_UP(n,d) (((n) + (d) - 1) / (d))
+#define BITS_PER_LONG (32)
+#define BIT(nr)			(1UL << (nr))
+#define BIT_MASK(nr)		(1UL << ((nr) % BITS_PER_LONG))
+#define BIT_WORD(nr)		((nr) / BITS_PER_LONG)
+#define BITS_PER_BYTE (8)
+#define BITS_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(RSP_UINT32))
+
 	struct block_struct{
 
 		block_struct* next;
@@ -114,6 +122,7 @@
 		RSP_UINT32 block_no;
 		RSP_UINT32 vcount;
 		RSP_UINT32 remained_remap_cnt;
+		RSP_UINT32 vbitmap[BITS_TO_LONGS(PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE)]; //valid bitmap for GC
 	};
 
 	struct block_struct_head
@@ -125,8 +134,7 @@
 	enum WRITE_TYPE{
 		SHRD_SW,
 		SHRD_RW,
-		SHRD_JN,
-		SHRD_JN_SP  //SHRD_JN_SP is not included in the WRITE_TYPE_NUM because this is only used for the indicator. (checkpoint)
+		SHRD_JN
 	};
 
 	struct NAND_bankstat
@@ -344,6 +352,13 @@ namespace Hesper{
 		//Map Management
 		RSP_UINT32 num_cached;
 
+		//dirty block bitmap page must be flushed together with dirty VTP at the change of active block 
+#define NUM_TOTAL_BLOCKS (BLKS_PER_PLANE * BANKS_PER_CHANNEL * NAND_NUM_CHANNELS)
+#define BB_PER_BBP (256) //bitmap size = 128byte, superpage size = 32KB, superpage / bitmap
+#define NUM_BBP DIV_ROUND_UP(NUM_TOTAL_BLOCKS, BB_PER_BBP) //# of block bitmap page for this ATL
+
+		RSP_UINT32 dirty_BBP_bitmap[BITS_TO_LONGS(NUM_BBP)];
+
 		//currently write bank number (include channel in it)
 		//e.g. 0 means channel 0 bank 0, 1 means channel 1 bank 0, etc.
 		RSP_UINT32	cur_write_bank;
@@ -399,6 +414,11 @@ namespace Hesper{
 		RSP_VOID set_vpn(RSP_UINT32 lpn, RSP_UINT32 vpn, RSP_UINT32 flag);
 		RSP_UINT32 get_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_VOID set_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, RSP_UINT32 vcount);
+
+		RSP_BOOL is_valid_vpn(RSP_UINT32 vpn);
+		RSP_VOID validate_vpn(RSP_UINT32 vpn);
+		RSP_VOID invalidate_vpn(RSP_UINT32 vpn);
+		
 		RSP_VOID garbage_collection(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_UINT32 inter_GC(RSP_UINT32 channel, RSP_UINT32 bank);
 
@@ -433,8 +453,6 @@ namespace Hesper{
 		TWRITE_HDR_ENTRY *find_twrite_entry_of_tLPN(RSP_UINT32 tLPN, TWRITE_HDR_LIST *list);
 		//to do
 		RSP_VOID remap_handler(RSP_UINT32 LPN, RSP_UINT32* Buff);
-
-		RSP_VOID switch_JN_todo_log(RSP_VOID);
 		RSP_VOID __do_remap(RSP_UINT8 REMAP_TYPE);
 		RSP_VOID do_remap(RSP_UINT8 REMAP_TYPE);	//gen num is for the twrite and remap version handling
 		//when the twrite entry is deleted from the list, do_remap should be called
@@ -455,12 +473,10 @@ namespace Hesper{
 
 		RSP_UINT32 return_map_ppn(RSP_UINT32 map_offset);
 
-		RSP_VOID flush(RSP_VOID);
 		RSP_VOID map_flush(RSP_VOID);
-		RSP_VOID meta_flush(RSP_VOID);
+		RSP_VOID BBP_flush(RSP_VOID);
 		RSP_VOID bank_meta_flush(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_VOID flush_bank(RSP_UINT32 channel, RSP_UINT32 bank);
-		RSP_VOID write_buffer_flush(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT8 WRITE_TYPE);
 		RSP_VOID test_NAND_list();
 
 		RSP_BOOL Issue(RSPProgramOp* RSPOp);
@@ -478,6 +494,32 @@ namespace Hesper{
 		RSP_UINT32 map_validation_check();
 		RSP_UINT32 map_vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
 		RSP_UINT32 vcount_test(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
+
+		inline RSP_BOOL get_bit(RSP_UINT32 * bitmap,RSP_UINT32 offset){
+			RSP_UINT32 *p = bitmap + BIT_WORD(offset);
+			return (*p & BIT_MASK(offset));
+		}
+
+		inline RSP_VOID set_bit(RSP_UINT32 * bitmap,RSP_UINT32 offset){
+			RSP_UINT32 *p = bitmap + BIT_WORD(offset);
+			*p |= BIT_MASK(offset);
+		}
+
+		inline RSP_VOID clear_bit(RSP_UINT32 * bitmap,RSP_UINT32 offset){
+			RSP_UINT32 *p = bitmap + BIT_WORD(offset);
+			*p &= ~(BIT_MASK(offset));
+		}
+
+		inline RSP_VOID clear_blockbitmap(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block){
+			RSPOSAL::RSP_MemSet(NAND_bank_state[channel][bank].block_list[block].vbitmap, 0x00, sizeof(RSP_UINT32) * BITS_TO_LONGS(PAGES_PER_BLK * PLANES_PER_BANK));
+			
+		}
+
+		//return block bitmap page number for the block 
+		inline RSP_UINT32 block_to_BBPN(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block){
+			RSP_UINT32 global_block = ((channel * BANKS_PER_CHANNEL + bank) * BLKS_PER_BANK) + block;
+			return global_block / BB_PER_BBP;
+		}
 		
 	};
 }
