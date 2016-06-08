@@ -1774,7 +1774,6 @@ namespace Hesper{
 		RSP_UINT32 map_page, loop, loop2, return_val, cache_slot, map_page_offset;
 		map_page = lpn / NUM_PAGES_PER_MAP;
 		map_page_offset = lpn % NUM_PAGES_PER_MAP;
-		dbg6 = 0;
 
 		if(lpn >= NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE){
 			dbg1 = lpn;
@@ -1800,6 +1799,8 @@ namespace Hesper{
 			if (num_cached != NUM_CACHED_MAP)
 			{
 				//cache have empty slot
+				map_read(map_page, num_cached);
+				
 				if(flag == Prof_SW)
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
 				else if(flag == Prof_RW)
@@ -1815,16 +1816,6 @@ namespace Hesper{
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
 				
-				map_read(map_page, num_cached);
-				dbg6++;
-				
-				for (loop2 = 0; loop2 < num_cached; loop2++)
-				{
-					cache_count[loop2]++;
-				}
-				//meta update
-				CACHE_MAPPING_TABLE[num_cached] = map_page;
-				cache_count[num_cached] = 1;
 				cache_slot = num_cached;
 				num_cached++;
 			}
@@ -1856,12 +1847,11 @@ namespace Hesper{
 					else
 						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_log, 1);
 					map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
-					dbg6++;
 					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
 				}
 
 				map_read(map_page, loop2);
-				dbg6++;
+				
 				if(flag == Prof_SW)
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
 				else if(flag == Prof_RW)
@@ -1877,13 +1867,21 @@ namespace Hesper{
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
 				
-				CACHE_MAPPING_TABLE[loop2] = map_page;
 				cache_slot = loop2;
-				for (loop = 0; loop < NUM_CACHED_MAP; loop++)
-					cache_count[loop]++;
-				cache_count[loop2] = 1;
-
 			}
+
+			CACHE_MAPPING_TABLE[cache_slot] = map_page;
+
+			if(flag >= Prof_IntraGC){
+				//when the map load is occured at the GC period, then the map should be LRU (not MRU)
+				cache_count[cache_slot] = num_cached;
+			}
+			else{
+				for(loop = 0; loop < num_cached; loop++)
+					cache_count[loop]++;
+				cache_count[cache_slot] = 1;
+			}
+			
 		}
 		else
 		{
@@ -1964,14 +1962,7 @@ namespace Hesper{
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-				
-				for (loop2 = 0; loop2 < num_cached; loop2++)
-				{
-					cache_count[loop2]++;
-				}
-				//meta update
-				CACHE_MAPPING_TABLE[num_cached] = map_page;
-				cache_count[num_cached] = 1;
+
 				cache_slot = num_cached;
 				num_cached++;
 			}
@@ -2023,14 +2014,22 @@ namespace Hesper{
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-				
-				CACHE_MAPPING_TABLE[loop2] = map_page;
-				cache_slot = loop2;
-				for (loop = 0; loop < NUM_CACHED_MAP; loop++)
-					cache_count[loop]++;
-				cache_count[loop2] = 1;
 
+				cache_slot = loop2;
 			}
+
+			CACHE_MAPPING_TABLE[cache_slot] = map_page;
+
+			if(flag >= Prof_IntraGC){
+				//when the map load is occured at the GC period, then the map should be LRU (not MRU)
+				cache_count[cache_slot] = num_cached;
+			}
+			else{
+				for(loop = 0; loop < num_cached; loop++)
+					cache_count[loop]++;
+				cache_count[cache_slot] = 1;
+			}
+			
 		}
 		else
 		{
@@ -2666,7 +2665,7 @@ namespace Hesper{
 			if (spare_lpn[iter] == RSP_INVALID_LPN)
 				is_valid[iter] = 0;
 			else {
-				RSP_UINT32 read_vpn = get_vpn(spare_lpn[iter], Prof_IntraGC);
+				RSP_UINT32 read_vpn = get_vpn(spare_lpn[iter], Prof_InterGC);
 				RSP_ASSERT(spare_lpn[iter] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 				RSP_ASSERT(read_vpn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || read_vpn == VC_MAX || is_in_write_buffer(read_vpn));
 				if (old_vpn * LPAGE_PER_PPAGE + iter == read_vpn) {
