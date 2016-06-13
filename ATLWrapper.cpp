@@ -149,7 +149,7 @@ namespace Hesper{
 			{
 				NAND_bank_state[channel][bank].block_list = (block_struct *)rspmalloc(sizeof(block_struct)* BLKS_PER_BANK);
 				for (loop = 0; loop < BLKS_PER_BANK; loop++){
-					RSPOSAL::RSP_MemSet(&NAND_bank_state[channel][bank].block_list[loop], 0x00, sizeof(block_struct));
+					RSPOSAL::RSP_MemSet((RSP_UINT32 *)&NAND_bank_state[channel][bank].block_list[loop], 0x00, sizeof(block_struct));
 					NAND_bank_state[channel][bank].block_list[loop].block_no = loop;
 					//NAND_bank_state[channel][bank].block_list[loop].remained_remap_cnt = 0;
 				}
@@ -1224,7 +1224,7 @@ namespace Hesper{
 					buff_cnt++;
 				}
 				
-				else if (write_type != SHRD_SW){
+				if (write_type != SHRD_SW){
 					if (twrite_entry->remained == 0){
 						//do_remap(write_type);
 						DO_REMAP_FLAG = true;

@@ -30,8 +30,8 @@
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
 	//test
-#define BLKS_PER_PLANE (96)
-//#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
+//#define BLKS_PER_PLANE (128)
+#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
@@ -43,12 +43,12 @@
 
 #define IS_DFTL (1) //FPM on off, when the FPM, CMT size must be 72MB
 #define IS_INCGC (1) //incremental GC on off
-#define NUM_READ_PER_INCGC 8
+#define NUM_READ_PER_INCGC 2
 
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 2 * MB; //2MB
+		static RSP_UINT32 CMT_size = 8 * MB; //2MB
 	
 		//Mapping data
 	
