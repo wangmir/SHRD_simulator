@@ -15,7 +15,7 @@
 	
 		//FTL CORE
 #define NUM_FTL_CORE 2
-#define THIS_CORE (_COREID_ - 1) //should be changed into variable
+#define THIS_CORE (__COREID__ - 1) //should be changed into variable
 	
 		//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
@@ -48,7 +48,7 @@
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 8 * MB; //2MB
+		static RSP_UINT32 CMT_size = 2 * MB; //2MB
 	
 		//Mapping data
 	
@@ -169,6 +169,8 @@
 		RSP_BOOL map_start;
 		RSP_BOOL meta_start;
 
+		RSP_UINT32 *map_blk_offset;
+
 		RSP_UINT32 remap_inbuff_cnt;
 
 		block_struct* block_list;
@@ -177,8 +179,6 @@
 		block_struct_head JN_todo_list;
 		block_struct_head data_list;
 		block_struct_head RW_log_list;
-		block_struct_head map_data_list;
-		block_struct_head map_free_list;
 		block_struct_head victim_list;
 	};
 
@@ -444,6 +444,7 @@ namespace Hesper{
 
 		RSP_VOID RSP_BufferCopy(RSP_UINT32* pstDescBuffer, RSP_UINT32* pstSrcBuffer, RSP_SECTOR_BITMAP bmp);
 		RSP_BOOL RSP_CheckBit(RSP_SECTOR_BITMAP nVar, RSP_SECTOR_BITMAP nBit);
+		RSP_VOID insert_bl_front(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head* list_head);
 		RSP_VOID insert_bl_tail(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head* list_head);
 		RSP_VOID del_blk_from_list(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head* list_head);
 
