@@ -159,6 +159,8 @@ namespace Hesper{
 				NAND_bank_state[channel][bank].RW_log_list.size = 0;
 				NAND_bank_state[channel][bank].data_list.size = 0;
 				NAND_bank_state[channel][bank].victim_list.size = 0;
+				NAND_bank_state[channel][bank].map_data_list.size = 0;
+				NAND_bank_state[channel][bank].map_free_list.size = 0;
 
 				NAND_bank_state[channel][bank].remap_inbuff_cnt = 0;
 
@@ -168,7 +170,7 @@ namespace Hesper{
 				
 				NAND_bank_state[channel][bank].map_start = false;
 				NAND_bank_state[channel][bank].meta_start = false;
-				block = 0;
+				
 				for (int iter = 0; iter < WRITE_TYPE_NUM; iter++){
 
 					NAND_bank_state[channel][bank].write_start[iter] = false;
@@ -178,30 +180,27 @@ namespace Hesper{
 						NAND_bank_state[channel][bank].writebuf_addr[iter][plane_iter] = NULL;
 					}
 				}
-			
-				NAND_bank_state[channel][bank].map_free_blk = MAP_ENTRY_BLK_PER_BANK - 1;
-				//MAP blk
-				NAND_bank_state[channel][bank].cur_map_vpn = 0;
-			
 
-				for (loop = 0; loop < MAP_ENTRY_BLK_PER_BANK; loop++)
+
+				for (block = 0; block < BLKS_PER_PLANE; block++)
 				{
-					for (plane = 0; plane < PLANES_PER_BANK; plane++)
-					{
-						RSP_erase_ops[plane].nChannel = (RSP_UINT8)channel;
-						RSP_erase_ops[plane].nBank = (RSP_UINT8)bank;
-						RSP_erase_ops[plane].nBlock = (RSP_UINT16)get_block(block * PLANES_PER_BANK * PAGES_PER_BLK + plane * PAGES_PER_BLK);
-					}
-					m_pVFLWrapper->INC_ERASEPENDING();
-					Issue(RSP_erase_ops);
-					WAIT_ERASEPENDING();
-
-					set_vcount(channel, bank, block++, (RSP_UINT32)VC_MAX);
-					MAP_VALID_COUNT[(channel * BANKS_PER_CHANNEL + bank) * MAP_ENTRY_BLK_PER_BANK + loop] = 0;
+					//randomize the block sequence when insert to free list
+					
+					RSP_UINT32 front_or_tail = 1; //need to randomize
+					if(front_or_tail)
+						insert_bl_front(channel, bank, block, &NAND_bank_state[channel][bank].free_list);
+					else
+						insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].free_list);
+					
+					set_vcount(channel, bank, block, 0);
 				}
-				NAND_bank_state[channel][bank].MAP_GC_BLK = loop - 1;
-				MAP_VALID_COUNT[(channel * BANKS_PER_CHANNEL + bank) * MAP_ENTRY_BLK_PER_BANK + loop - 1] = (RSP_UINT32)VC_MAX;
+				
 				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				
+				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+				block = get_free_block(channel, bank);
+
 				NAND_bank_state[channel][bank].cur_meta_vpn = 0;
 
 				NAND_bank_state[channel][bank].cpybuf_addr = (RSP_UINT32*)rspmalloc(BYTES_PER_SUPER_PAGE);
@@ -220,9 +219,39 @@ namespace Hesper{
 				WAIT_ERASEPENDING();
 				NAND_bank_state[channel][bank].meta_blk = block;
 				set_vcount(channel, bank, block++, (RSP_UINT32)VC_MAX);
+				
+				////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				//MAP blk
+				
+				for (loop = 0; loop < MAP_ENTRY_BLK_PER_BANK; loop++)
+				{
+					block = get_free_block(channel, bank);
+					for (plane = 0; plane < PLANES_PER_BANK; plane++)
+					{
+						RSP_erase_ops[plane].nChannel = (RSP_UINT8)channel;
+						RSP_erase_ops[plane].nBank = (RSP_UINT8)bank;
+						RSP_erase_ops[plane].nBlock = (RSP_UINT16)get_block(block * PLANES_PER_BANK * PAGES_PER_BLK + plane * PAGES_PER_BLK);
+					}
+					m_pVFLWrapper->INC_ERASEPENDING();
+					Issue(RSP_erase_ops);
+					WAIT_ERASEPENDING();
+
+					set_vcount(channel, bank, block, 0);
+					insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].map_free_list);
+				}
+				
+				NAND_bank_state[channel][bank].MAP_GC_BLK = get_map_free_block(channel, bank);
+
+				block = get_map_free_block(channel, bank);
+
+				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].map_data_list);
+
+				NAND_bank_state[channel][bank].cur_map_vpn = block * PAGES_PER_BLK;
 
 				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 				//GC blk
+				
+				block = get_free_block(channel, bank);
 				set_gc_block(channel, bank, block);
 				for (plane = 0; plane < PLANES_PER_BANK; plane++)
 				{
@@ -233,8 +262,10 @@ namespace Hesper{
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
 				WAIT_ERASEPENDING();
-				set_vcount(channel, bank, block++, (RSP_UINT32)VC_MAX);
+				set_vcount(channel, bank, block, (RSP_UINT32)VC_MAX);
 				////////////////////////////////////////////////////////////////////////////////////////////////
+			
+				block = get_free_block(channel, bank);	
 				set_new_write_vpn(channel, bank, PAGES_PER_BLK * block);
 				for (plane = 0; plane < PLANES_PER_BANK; plane++)
 				{
@@ -246,8 +277,9 @@ namespace Hesper{
 				Issue(RSP_erase_ops);
 				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
-				insert_bl_tail(channel, bank, block++, &NAND_bank_state[channel][bank].data_list);
+				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].data_list);
 
+				block = get_free_block(channel, bank);	
 				set_new_write_vpn_RW(channel, bank, PAGES_PER_BLK * block);
 				for (plane = 0; plane < PLANES_PER_BANK; plane++)
 				{
@@ -259,8 +291,9 @@ namespace Hesper{
 				Issue(RSP_erase_ops);
 				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
-				insert_bl_tail(channel, bank, block++, &NAND_bank_state[channel][bank].RW_log_list);
+				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].RW_log_list);
 
+				block = get_free_block(channel, bank);
 				set_new_write_vpn_JN(channel, bank, PAGES_PER_BLK * block);
 				for (plane = 0; plane < PLANES_PER_BANK; plane++)
 				{
@@ -272,19 +305,8 @@ namespace Hesper{
 				Issue(RSP_erase_ops);
 				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
-				insert_bl_tail(channel, bank, block++, &NAND_bank_state[channel][bank].JN_log_list);
-				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-				//normal blk
-			
-				for (; block < BLKS_PER_PLANE; block++)
-				{
-					insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].free_list);
-					set_vcount(channel, bank, block, 0);
-				}
-			
-				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].JN_log_list);
+				
 			}
 		}
 		for (loop = 0; loop < NUM_CACHED_MAP; loop++){
@@ -304,6 +326,16 @@ namespace Hesper{
 #endif
 
 		return true;
+	}
+
+	
+	//need delete after calling this function
+	RSP_UINT32 ATLWrapper::get_map_free_block(RSP_UINT32 channel, RSP_UINT32 bank){
+	
+		if (NAND_bank_state[channel][bank].map_free_list.size == 0)
+			return 0;
+		else
+			return NAND_bank_state[channel][bank].map_free_list.head->block_no;
 	}
 
 	// map read
@@ -528,14 +560,14 @@ namespace Hesper{
 	//vcount management
 	RSP_UINT32 ATLWrapper::get_map_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block)
 	{
-		RSP_UINT32 vcount = MAP_VALID_COUNT[(channel * BANKS_PER_CHANNEL + bank) * MAP_ENTRY_BLK_PER_BANK + block];
+		RSP_UINT32 vcount = NAND_bank_state[channel][bank].block_list[block].vcount;
 		RSP_ASSERT(vcount <= PAGES_PER_BLK || vcount == (RSP_UINT32)VC_MAX);
 		return vcount;
 	}
 	RSP_VOID ATLWrapper::set_map_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, RSP_UINT32 vcount)
 	{
 		RSP_ASSERT(vcount <= PAGES_PER_BLK || vcount == (RSP_UINT32)VC_MAX);
-		MAP_VALID_COUNT[(channel * BANKS_PER_CHANNEL + bank) * MAP_ENTRY_BLK_PER_BANK + block] = vcount;
+		NAND_bank_state[channel][bank].block_list[block].vcount = vcount;
 		return;
 	}
 	///////////////////////////////////////////////////////////////////////////////
@@ -3031,11 +3063,17 @@ do_erase:
 				continue;
 			}
 			vcount = get_vcount(channel, bank, block);
-			if (temp_vcount > vcount)
+			if(vcount == 0){
+				result_block = block;
+				temp_vcount = vcount;
+				break;
+			}
+			else if (temp_vcount > vcount)
 			{
 				result_block = block;
 				temp_vcount = vcount;
 			}
+			
 			blk_tmp = blk_tmp->next;
 		}
 		if(temp_vcount > PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE - 8){
@@ -3064,8 +3102,37 @@ do_erase:
 		return MAP_MAPPING_TABLE[map_offset];
 	}
 
-	//block list manager
+	RSP_VOID ATLWrapper::insert_bl_front(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head *list_head){
 
+		if(block == 0){
+			dbg1 = channel;
+			dbg2 = bank;
+			dbg3 = block;
+			RSP_ASSERT(0);
+		}
+
+		if (list_head->size == 0)
+		{
+			list_head->head = &NAND_bank_state[channel][bank].block_list[block];
+			list_head->head->before = list_head->head;
+			list_head->head->next = list_head->head;
+		}
+		else
+		{
+			block_struct *temp = &NAND_bank_state[channel][bank].block_list[block];
+			temp->before = list_head->head->before;
+			temp->next = list_head->head;
+			list_head->head->before->next = temp;
+			list_head->head->before = temp;
+			//insert front
+			list_head->head = temp;
+		
+		}
+		list_head->size++;
+	}
+
+
+	//block list manager
 	RSP_VOID ATLWrapper::insert_bl_tail(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block, block_struct_head *list_head){
 
 		if(block == 0){

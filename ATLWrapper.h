@@ -177,6 +177,8 @@
 		block_struct_head JN_todo_list;
 		block_struct_head data_list;
 		block_struct_head RW_log_list;
+		block_struct_head map_data_list;
+		block_struct_head map_free_list;
 		block_struct_head victim_list;
 	};
 
