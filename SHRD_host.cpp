@@ -223,11 +223,6 @@ void SHRD_host::__do_remap(RSP_UINT32 size) {
 				memset(remap_entry, 0x00, sizeof(SHRD_REMAP_DATA));
 			}
 
-			if (map->o_addr == 35302) {
-				printf("!!");
-
-			}
-
 			remap_entry->o_addr[remap_entry->remap_count] = map->o_addr;
 			remap_entry->t_addr[remap_entry->remap_count] = map->t_addr;
 			map->flags = SHRD_REMAPPING_MAP;
@@ -338,9 +333,9 @@ int SHRD_host::HOST_gen_random_workload() {
 	return 0;
 }
 
-void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn, RSP_UINT32 *buff) {
+void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn) {
 
-	memset(buff, 0x00, 4096);
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
 
 	if (lpn % 2 == 0)
 		HIL->pATLWrapper[0]->RSP_ReadPage(lpn, lpn / 2, 0xff, buff);
@@ -394,9 +389,9 @@ void SHRD_host::HOST_verify_lpn(RSP_UINT32 lpn, RSP_UINT32 *buff) {
 	}
 }
 
-void SHRD_host::HOST_verify_random_workload(RSP_UINT32 *buff) {
+void SHRD_host::HOST_verify_random_workload() {
 
-	//RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
+	RSP_UINT32 *buff = (RSP_UINT32 *)malloc(4096);
 	printf("\nVerifying\n");
 
 	for (RSP_UINT32 i = 0; i < LPN_RANGE; i++) {
@@ -457,6 +452,7 @@ void SHRD_host::HOST_verify_random_workload(RSP_UINT32 *buff) {
 			break;
 		}
 	}
+	//free(buff);
 	printf("verify end\n");
 }
 

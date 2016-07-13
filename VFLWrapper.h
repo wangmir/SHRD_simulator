@@ -42,13 +42,9 @@ class VFLWrapper
 {
 	public:
 
-
-#define SMALL_DATA_BLOCK 0
 #define VFL_BLOCK_DATA_SIZE (1048576LL)
-#define VFL_SMALL_BLOCK_DATA_SIZE (1024LL)
 #define VFL_BLOCK_OOB_SIZE (2048)
 
-#define NUM_MAP_BLOCKS 5
 
 		char dir[1024];
 		char temp_dir[1024];
@@ -78,8 +74,6 @@ class VFLWrapper
 		void WAIT_READPENDING(RSP_UINT32 *dbg);
 		void _GetSpareData(RSP_UINT32* spare_buf);
 	
-		RSP_UINT64 calc_seek_address(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);
-
 		bool Issue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
 		bool Issue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
 		bool Issue(RSPEraseOp RSPOp[4], RSP_UINT32 *dbg);
@@ -89,18 +83,11 @@ class VFLWrapper
 		bool MetaIssue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
 		bool MetaIssue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
 
+		RSP_UINT32 VFL_Timer_GetTimeTick();
+
 		bool RSP_SetProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_INC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
 		bool RSP_DEC_ProfileData(RSP_UINT32 idx, RSP_UINT32 ProfileData);
-
-		inline RSP_VOID* add_addr(RSP_VOID* start_addr, RSP_UINT32 offset)
-		{
-			return (RSP_VOID *)((RSP_UINT32)start_addr + offset);
-		}
-		inline RSP_VOID* sub_addr(RSP_VOID* start_addr, RSP_UINT32 offset)
-		{
-			return (RSP_VOID *)((RSP_UINT32)start_addr - offset);
-		}
 };
 
 #endif

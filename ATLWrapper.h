@@ -15,7 +15,7 @@
 	
 		//FTL CORE
 #define NUM_FTL_CORE 2
-#define THIS_CORE (__COREID__ - 1) //should be changed into variable
+#define THIS_CORE (_COREID_ - 1) //should be changed into variable
 	
 		//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
@@ -29,9 +29,10 @@
 #define PAGES_PER_BLK RSP_PAGE_PER_BLOCK
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
-	//test
-//#define BLKS_PER_PLANE (128)
-#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
+//test
+#define BLKS_PER_PLANE (128)
+
+//#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
@@ -42,16 +43,17 @@
 #define NUM_LOGICAL_BLOCK ((110 / NUM_FTL_CORE) * 1024)
 
 #define IS_DFTL (1) //FPM on off, when the FPM, CMT size must be 72MB
-#define IS_INCGC (1) //incremental GC on off
+#define IS_INCGC (0) //incremental GC on off
+#define IS_GCMAPLOG (0) //map logging on GC on/off
 #define NUM_READ_PER_INCGC 2
 
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 2 * MB; //2MB
+		static RSP_UINT32 CMT_size = 256 * KB; //2MB
 	
 		//Mapping data
-	
+		
 #define NUM_MAP_ENTRY ((NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE + (MAP_ENTRY_SIZE / sizeof_u32) - 1) / (MAP_ENTRY_SIZE / sizeof_u32))
 #define NUM_MAP_ENTRY_BLK ((NUM_MAP_ENTRY + PAGES_PER_BLK - 1) / PAGES_PER_BLK)
 #define MAP_ENTRY_BLK_PER_BANK ((NUM_MAP_ENTRY_BLK + (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) - 1) / (BANKS_PER_CHANNEL * NAND_NUM_CHANNELS) + 5)
@@ -115,6 +117,27 @@
 #define BITS_PER_BYTE (8)
 #define BITS_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(RSP_UINT32))
 
+	struct rb_node
+	{
+		RSP_UINT32	rb_parent_color;
+#define	RB_RED		0
+#define	RB_BLACK	1
+		rb_node *rb_right;
+		rb_node *rb_left;
+	};
+	
+	struct rb_root
+	{
+		rb_node *rb_node;
+	};
+
+	//log map for GC (map logging)
+	struct log_map{
+		rb_node node;
+		RSP_UINT32 lpn;
+		RSP_UINT32 vpn;
+	};
+
 	struct block_struct{
 
 		block_struct* next;
@@ -172,6 +195,9 @@
 		RSP_UINT32 *map_blk_offset;
 
 		RSP_UINT32 remap_inbuff_cnt;
+
+		log_map *gc_map_log;
+		rb_root gc_map_tree;
 
 		block_struct* block_list;
 		block_struct_head free_list;
@@ -253,7 +279,7 @@ namespace Hesper{
 		Prof_SW_modify_read,
 		Prof_SW_modify_buf_write,
 		Prof_SW_map_load,
-		Prof_SW_map_log,
+		Prof_SW_map_write,
 		Prof_SW_block_alloc,
 		
 	//RW
@@ -264,12 +290,12 @@ namespace Hesper{
 		Prof_RW_modify_read,
 		Prof_RW_modify_buf_write,
 		Prof_RW_map_load,
-		Prof_RW_map_log,
+		Prof_RW_map_write,
 		Prof_RW_block_alloc,
 		Prof_RW_Remap_cnt,
 		Prof_RW_Remap_entry,
 		Prof_RW_Remap_map_load,
-		Prof_RW_Remap_map_log,
+		Prof_RW_Remap_map_write,
 		Prof_RW_twrite_cnt,
 		
 	//JN
@@ -280,12 +306,12 @@ namespace Hesper{
 		Prof_JN_modify_read,
 		Prof_JN_modify_buf_write,
 		Prof_JN_map_load,
-		Prof_JN_map_log,
+		Prof_JN_map_write,
 		Prof_JN_block_alloc,
 		Prof_JN_Remap_cnt,
 		Prof_JN_Remap_entry,
 		Prof_JN_Remap_map_load,
-		Prof_JN_Remap_map_log,
+		Prof_JN_Remap_map_write,
 		Prof_JN_twrite_cnt,
 
 	//Intra_GC
@@ -293,7 +319,7 @@ namespace Hesper{
 		Prof_IntraGC_write,
 		Prof_IntraGC_read,
 		Prof_IntraGC_map_load,
-		Prof_IntraGC_map_log,
+		Prof_IntraGC_map_write,
 		Prof_IntraGC_erase,
 
 	//Inter_GC
@@ -301,11 +327,13 @@ namespace Hesper{
 		Prof_InterGC_write,
 		Prof_InterGC_read,
 		Prof_InterGC_map_load,
-		Prof_InterGC_map_log,
+		Prof_InterGC_map_write,
 		Prof_InterGC_erase,
 		
 	//Map_manage	
 		Prof_map_hit,
+		Prof_map_log_hit,
+		Prof_map_log_flush,
 		Prof_map_miss,
 		Prof_map_erase,
 
@@ -321,8 +349,8 @@ namespace Hesper{
 	//ETC	
 		Prof_Init_erase,
 		Prof_total_num,
-		
 	};
+	
 	enum{
 		Prof_SW = 0,
 		Prof_RW,
@@ -523,7 +551,71 @@ namespace Hesper{
 			RSP_UINT32 global_block = ((channel * BANKS_PER_CHANNEL + bank) * BLKS_PER_BANK) + block;
 			return global_block / BB_PER_BBP;
 		}
+
+		//RB tree 
+#define container_of(ptr, type,member) \
+			((type *)(((RSP_UINT8 *)(ptr)) - ((RSP_UINT8*)(&((type*)0)->member))))
+//#define offsetof(TYPE, MEMBER) ((RSP_UINT32) &((TYPE *)0)->MEMBER)
 		
+#define rb_parent(r)   ((rb_node *)((r)->rb_parent_color & ~3))
+#define rb_color(r)   ((r)->rb_parent_color & 1)
+#define rb_is_red(r)   (!rb_color(r))
+#define rb_is_black(r) rb_color(r)
+#define rb_set_red(r)  do { (r)->rb_parent_color &= ~1; } while (0)
+#define rb_set_black(r)  do { (r)->rb_parent_color |= 1; } while (0)
+		
+		static inline RSP_VOID rb_set_parent(rb_node *rb, rb_node *p)
+		{
+			rb->rb_parent_color = (rb->rb_parent_color & 3) | (RSP_UINT32)p;
+		}
+		static inline RSP_VOID rb_set_color(rb_node *rb, RSP_INT32 color)
+		{
+			rb->rb_parent_color = (rb->rb_parent_color & ~1) | color;
+		}
+		
+#define RB_ROOT	(rb_root) { NULL, }
+#define	rb_entry(ptr, type, member) container_of(ptr, type, member)
+		
+#define RB_EMPTY_ROOT(root)	((root)->rb_node == NULL)
+#define RB_EMPTY_NODE(node)	(rb_parent(node) == node)
+#define RB_CLEAR_NODE(node)	(rb_set_parent(node, node))
+		
+		RSP_VOID __rb_rotate_left(rb_node *node, rb_root *root);
+		RSP_VOID __rb_rotate_right(rb_node *node, rb_root *root);
+		RSP_VOID __rb_erase_color(rb_node *node, rb_node *parent, rb_root *root);
+		
+		static inline RSP_VOID rb_init_node(rb_node *rb)
+		{
+			rb->rb_parent_color = 0;
+			rb->rb_right = NULL;
+			rb->rb_left = NULL;
+			RB_CLEAR_NODE(rb);
+		}
+		
+		RSP_VOID rb_insert_color(rb_node *, rb_root *);
+		RSP_VOID rb_erase(rb_node *, rb_root *);
+		
+		/* Find logical next and previous nodes in a tree */
+		rb_node *rb_next(const rb_node *);
+		rb_node *rb_prev(const rb_node *);
+		rb_node *rb_first(const rb_root *);
+		rb_node *rb_last(const rb_root *);
+		
+		static inline RSP_VOID rb_link_node(rb_node * node, rb_node * parent, rb_node ** rb_link)
+		{
+			node->rb_parent_color = (RSP_UINT32 )parent;
+			node->rb_left = node->rb_right = NULL;
+		
+			*rb_link = node;
+		}
+
+		log_map* log_map_search(rb_root *root, RSP_UINT32 lpn);
+		RSP_UINT32 log_map_insert(rb_root *root, log_map *map_entry);
+		RSP_VOID log_map_remove(rb_root *root, RSP_UINT32 lpn);
+
+		RSP_VOID set_map_log(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 lpn, RSP_UINT32 vpn);
+		log_map *get_map_log(RSP_UINT32 lpn, RSP_UINT32 *channel, RSP_UINT32 *bank);
+		RSP_VOID flush_map_log(RSP_UINT32 channel, RSP_UINT32 bank);
 	};
 }
 

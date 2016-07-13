@@ -1,10 +1,19 @@
 #ifndef __RSPHeader_H_
 #define __RSPHeader_H_
 
-typedef unsigned long long RSP_UINT64;
-typedef unsigned long RSP_UINT32;
-typedef unsigned short RSP_UINT16;
-typedef unsigned char RSP_UINT8;
+typedef signed long long	RSP_INT64;
+typedef signed long			RSP_INT32;
+typedef signed short		RSP_INT16;
+typedef signed char			RSP_INT8;
+typedef unsigned long long	RSP_UINT64;
+typedef unsigned long		RSP_UINT32;
+typedef unsigned short		RSP_UINT16;
+typedef unsigned char		RSP_UINT8;
+typedef bool				RSP_BOOL;
+typedef RSP_UINT32			RSP_LPN;
+typedef RSP_UINT32			RSP_VPN;
+typedef RSP_UINT16			RSP_SECTOR_BITMAP;
+typedef	RSP_UINT32*			RSP_DataBuffer;
 
 typedef bool RSP_BOOL;
 typedef void RSP_VOID;
@@ -27,5 +36,8 @@ typedef RSP_UINT16 RSP_SECTOR_BITMAP;
 #define RSP_BLOCK_PER_PLANE (1987)
 
 #define __COREID__ (0) //not used on the simulator
+
+
+
 
 #endif

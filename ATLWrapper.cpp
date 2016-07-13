@@ -172,6 +172,12 @@ namespace Hesper{
 				NAND_bank_state[channel][bank].map_start = false;
 				NAND_bank_state[channel][bank].meta_start = false;
 				
+#if IS_GCMAPLOG
+				//RB tree initialization
+				NAND_bank_state[channel][bank].gc_map_tree.rb_node = NULL;
+				//# of lpages per superblock
+				NAND_bank_state[channel][bank].gc_map_log = (log_map *)rspmalloc(sizeof(log_map) * PLANES_PER_BANK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
+#endif
 				for (int iter = 0; iter < WRITE_TYPE_NUM; iter++){
 
 					NAND_bank_state[channel][bank].write_start[iter] = false;
@@ -187,6 +193,7 @@ namespace Hesper{
 					//randomize the block sequence when insert to free list
 					
 					RSP_UINT32 front_or_tail = 1; //need to randomize
+					//RSP_UINT32 front_or_tail = m_pVFLWrapper->VFL_Timer_GetTimeTick() & 0x1;
 					if(front_or_tail)
 						insert_bl_front(channel, bank, block, &NAND_bank_state[channel][bank].free_list);
 					else
@@ -211,7 +218,7 @@ namespace Hesper{
 					}
 					m_pVFLWrapper->INC_ERASEPENDING();
 					Issue(RSP_erase_ops);
-					//WAIT_ERASEPENDING();
+					WAIT_ERASEPENDING();
 					
 					NAND_bank_state[channel][bank].map_blk_offset[loop] = block;
 					set_vcount(channel, bank, block, (RSP_UINT32)VC_MAX);
@@ -238,7 +245,7 @@ namespace Hesper{
 				}
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
-				//WAIT_ERASEPENDING();
+				WAIT_ERASEPENDING();
 				NAND_bank_state[channel][bank].meta_blk = block;
 				set_vcount(channel, bank, block, (RSP_UINT32)VC_MAX);
 
@@ -255,7 +262,7 @@ namespace Hesper{
 				}
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
-				//WAIT_ERASEPENDING();
+				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, (RSP_UINT32)VC_MAX);
 				////////////////////////////////////////////////////////////////////////////////////////////////
 				block = get_free_block(channel, bank);
@@ -269,7 +276,7 @@ namespace Hesper{
 				}
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
-				//WAIT_ERASEPENDING();
+				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
 				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].data_list);
 				
@@ -284,7 +291,7 @@ namespace Hesper{
 				}
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
-				//WAIT_ERASEPENDING();
+				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
 				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].RW_log_list);
 
@@ -299,7 +306,7 @@ namespace Hesper{
 				}
 				m_pVFLWrapper->INC_ERASEPENDING();
 				Issue(RSP_erase_ops);
-				//WAIT_ERASEPENDING();
+				WAIT_ERASEPENDING();
 				set_vcount(channel, bank, block, 0);
 				insert_bl_tail(channel, bank, block, &NAND_bank_state[channel][bank].JN_log_list);
 				/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1816,6 +1823,8 @@ namespace Hesper{
 		return write_vpn;
 	}
 
+	
+
 	//L2P management
 	///////////////////////////////////////////////////////////////////////////////
 	//get_vpn: return L2P table value
@@ -1835,6 +1844,16 @@ namespace Hesper{
 
 		//RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
+
+#if IS_GCMAPLOG
+		//confirm map log first
+		log_map *map_entry = get_map_log(lpn, NULL, NULL);
+		if(map_entry){
+			//map log hit
+			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_log_hit, 1);
+			return map_entry->vpn;
+		}
+#endif
 
 #if IS_DFTL
 		//check this map_page is in SRAM
@@ -1885,19 +1904,19 @@ namespace Hesper{
 				{
 					//write victim 
 					if(flag == Prof_SW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
 					else if(flag == Prof_RW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
 					else if(flag == Prof_JN)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
 					else if(flag == Prof_JN_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
 					else if(flag == Prof_RW_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
 					else if(flag == Prof_IntraGC)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
 					else
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
 					map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
 					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
 				}
@@ -1981,6 +2000,17 @@ namespace Hesper{
 		RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
 		RSP_ASSERT(vpn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || vpn == VC_MAX || is_in_write_buffer(vpn));
+
+#if IS_GCMAPLOG
+		//confirm map log first
+		RSP_UINT32 channel, bank;
+		log_map *map_entry = get_map_log(lpn, &channel, &bank);
+		if(map_entry){
+			//map log hit
+			//m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_log_hit, 1);
+			rb_erase(&map_entry->node, &NAND_bank_state[channel][bank].gc_map_tree);
+		}
+#endif
 		
 #if IS_DFTL
 		//check this map_page is in DRAM
@@ -2032,19 +2062,19 @@ namespace Hesper{
 				{
 					//write victim 
 					if(flag == Prof_SW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
 					else if(flag == Prof_RW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
 					else if(flag == Prof_JN)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
 					else if(flag == Prof_JN_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
 					else if(flag == Prof_RW_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
 					else if(flag == Prof_IntraGC)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
 					else
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_log, 1);
+						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
 				
 					map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
 					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
@@ -2717,10 +2747,11 @@ namespace Hesper{
 			if (spare_lpn[iter] == RSP_INVALID_LPN)
 				is_valid[iter] = 0;
 			else {
-				RSP_UINT32 read_vpn = get_vpn(spare_lpn[iter], Prof_InterGC);
+				//RSP_UINT32 read_vpn = get_vpn(spare_lpn[iter], Prof_InterGC);
+				//we don't need to read the map because we have valid bitmap
+				
 				RSP_ASSERT(spare_lpn[iter] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
-				RSP_ASSERT(read_vpn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || read_vpn == VC_MAX || is_in_write_buffer(read_vpn));
-				if (old_vpn * LPAGE_PER_PPAGE + iter == read_vpn) {
+				if (is_valid_vpn(old_vpn * LPAGE_PER_PPAGE + iter)) {
 					is_valid[iter] = 1;
 				}
 			}
@@ -2750,7 +2781,13 @@ namespace Hesper{
 			gc_buff = (RSP_UINT32 *)add_addr(NAND_bank_state[channel][bank].GCbuf_addr, BYTES_PER_SUPER_PAGE);
 		else
 			gc_buff = NAND_bank_state[channel][bank].GCbuf_addr;
-
+		
+#if IS_GCMAPLOG
+		if(free_vpn_idx % PAGES_PER_BLK == PAGES_PER_BLK - 1){
+			//gc block is full, need to flush the map log for corresponding bank
+			flush_map_log(channel, bank);
+		}
+#endif
 		if (free_vpn_idx == VC_MAX || (free_vpn_idx % PAGES_PER_BLK == PAGES_PER_BLK - 1)) {
 			gc_block = get_gc_block(channel, bank);
 			if (gc_block == VC_MAX)
@@ -2775,7 +2812,14 @@ namespace Hesper{
 					+ free_vpn_idx % PAGES_PER_BLK) * LPAGE_PER_PPAGE + buf_offset_iter;
 				if (NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN] != RSP_INVALID_LPN) {
 					valid_count++;
+#if IS_GCMAPLOG
+					//need to write map log rather than set the VTP
+					set_map_log(channel, bank, NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN],
+						plane_ppn[buf_offset_iter]);
+					
+#else				
 					set_vpn(NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN], plane_ppn[buf_offset_iter], Prof_InterGC);
+#endif
 					validate_vpn(plane_ppn[buf_offset_iter]);
 					RSP_ASSERT(NAND_bank_state[channel][bank].GCbuf_lpn[cpy_plane_iter][buf_offset_iter][REQ_LPN] < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 					RSP_ASSERT(plane_ppn[buf_offset_iter] < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || plane_ppn[buf_offset_iter] == VC_MAX || is_in_write_buffer(plane_ppn[buf_offset_iter]));
@@ -3091,6 +3135,7 @@ do_erase:
 			blk_tmp = blk_tmp->next;
 		}
 		if(temp_vcount > PAGES_PER_BLK * PLANES_PER_BANK * LPAGE_PER_PPAGE - 8){
+			//there are not enough free page in here, 8 means 1 super page (4 * 8 = 32KB)
 			dbg1 = temp_vcount;
 			dbg2 = channel;
 			dbg3 = bank;
@@ -3500,4 +3545,445 @@ do_erase:
 		}
 		return 0;
 	}
+
+	//RB tree
+	RSP_VOID ATLWrapper::__rb_rotate_left(rb_node *node, rb_root *root)
+	{
+		rb_node *right = node->rb_right;
+		rb_node *parent = rb_parent(node);
+	
+		if ((node->rb_right = right->rb_left))
+			rb_set_parent(right->rb_left, node);
+		right->rb_left = node;
+	
+		rb_set_parent(right, parent);
+	
+		if (parent)
+		{
+			if (node == parent->rb_left)
+				parent->rb_left = right;
+			else
+				parent->rb_right = right;
+		}
+		else
+			root->rb_node = right;
+		rb_set_parent(node, right);
+	}
+	
+	RSP_VOID ATLWrapper::__rb_rotate_right(rb_node *node, rb_root *root)
+	{
+		rb_node *left = node->rb_left;
+		rb_node *parent = rb_parent(node);
+	
+		if ((node->rb_left = left->rb_right))
+			rb_set_parent(left->rb_right, node);
+		left->rb_right = node;
+	
+		rb_set_parent(left, parent);
+	
+		if (parent)
+		{
+			if (node == parent->rb_right)
+				parent->rb_right = left;
+			else
+				parent->rb_left = left;
+		}
+		else
+			root->rb_node = left;
+		rb_set_parent(node, left);
+	}
+	
+	RSP_VOID ATLWrapper::rb_insert_color(rb_node *node, rb_root *root)
+	{
+		rb_node *parent, *gparent;
+	
+		while ((parent = rb_parent(node)) && rb_is_red(parent))
+		{
+			gparent = rb_parent(parent);
+	
+			if (parent == gparent->rb_left)
+			{
+				{
+					register rb_node *uncle = gparent->rb_right;
+					if (uncle && rb_is_red(uncle))
+					{
+						rb_set_black(uncle);
+						rb_set_black(parent);
+						rb_set_red(gparent);
+						node = gparent;
+						continue;
+					}
+				}
+	
+				if (parent->rb_right == node)
+				{
+					register rb_node *tmp;
+					__rb_rotate_left(parent, root);
+					tmp = parent;
+					parent = node;
+					node = tmp;
+				}
+	
+				rb_set_black(parent);
+				rb_set_red(gparent);
+				__rb_rotate_right(gparent, root);
+			} else {
+				{
+					register rb_node *uncle = gparent->rb_left;
+					if (uncle && rb_is_red(uncle))
+					{
+						rb_set_black(uncle);
+						rb_set_black(parent);
+						rb_set_red(gparent);
+						node = gparent;
+						continue;
+					}
+				}
+	
+				if (parent->rb_left == node)
+				{
+					register rb_node *tmp;
+					__rb_rotate_right(parent, root);
+					tmp = parent;
+					parent = node;
+					node = tmp;
+				}
+	
+				rb_set_black(parent);
+				rb_set_red(gparent);
+				__rb_rotate_left(gparent, root);
+			}
+		}
+	
+		rb_set_black(root->rb_node);
+	}
+	
+	 RSP_VOID ATLWrapper::__rb_erase_color(rb_node *node, rb_node *parent, rb_root *root)
+	{
+		rb_node *other;
+	
+		while ((!node || rb_is_black(node)) && node != root->rb_node)
+		{
+			if (parent->rb_left == node)
+			{
+				other = parent->rb_right;
+				if (rb_is_red(other))
+				{
+					rb_set_black(other);
+					rb_set_red(parent);
+					__rb_rotate_left(parent, root);
+					other = parent->rb_right;
+				}
+				if ((!other->rb_left || rb_is_black(other->rb_left)) &&
+					(!other->rb_right || rb_is_black(other->rb_right)))
+				{
+					rb_set_red(other);
+					node = parent;
+					parent = rb_parent(node);
+				}
+				else
+				{
+					if (!other->rb_right || rb_is_black(other->rb_right))
+					{
+						rb_set_black(other->rb_left);
+						rb_set_red(other);
+						__rb_rotate_right(other, root);
+						other = parent->rb_right;
+					}
+					rb_set_color(other, rb_color(parent));
+					rb_set_black(parent);
+					rb_set_black(other->rb_right);
+					__rb_rotate_left(parent, root);
+					node = root->rb_node;
+					break;
+				}
+			}
+			else
+			{
+				other = parent->rb_left;
+				if (rb_is_red(other))
+				{
+					rb_set_black(other);
+					rb_set_red(parent);
+					__rb_rotate_right(parent, root);
+					other = parent->rb_left;
+				}
+				if ((!other->rb_left || rb_is_black(other->rb_left)) &&
+					(!other->rb_right || rb_is_black(other->rb_right)))
+				{
+					rb_set_red(other);
+					node = parent;
+					parent = rb_parent(node);
+				}
+				else
+				{
+					if (!other->rb_left || rb_is_black(other->rb_left))
+					{
+						rb_set_black(other->rb_right);
+						rb_set_red(other);
+						__rb_rotate_left(other, root);
+						other = parent->rb_left;
+					}
+					rb_set_color(other, rb_color(parent));
+					rb_set_black(parent);
+					rb_set_black(other->rb_left);
+					__rb_rotate_right(parent, root);
+					node = root->rb_node;
+					break;
+				}
+			}
+		}
+		if (node)
+			rb_set_black(node);
+	}
+	
+	RSP_VOID ATLWrapper::rb_erase(rb_node *node, rb_root *root)
+	{
+		rb_node *child, *parent;
+		RSP_INT32 color;
+	
+		if (!node->rb_left)
+			child = node->rb_right;
+		else if (!node->rb_right)
+			child = node->rb_left;
+		else
+		{
+			rb_node *old = node, *left;
+	
+			node = node->rb_right;
+			while ((left = node->rb_left) != NULL)
+				node = left;
+	
+			if (rb_parent(old)) {
+				if (rb_parent(old)->rb_left == old)
+					rb_parent(old)->rb_left = node;
+				else
+					rb_parent(old)->rb_right = node;
+			} else
+				root->rb_node = node;
+	
+			child = node->rb_right;
+			parent = rb_parent(node);
+			color = rb_color(node);
+	
+			if (parent == old) {
+				parent = node;
+			} else {
+				if (child)
+					rb_set_parent(child, parent);
+				parent->rb_left = child;
+	
+				node->rb_right = old->rb_right;
+				rb_set_parent(old->rb_right, node);
+			}
+	
+			node->rb_parent_color = old->rb_parent_color;
+			node->rb_left = old->rb_left;
+			rb_set_parent(old->rb_left, node);
+	
+			goto color;
+		}
+	
+		parent = rb_parent(node);
+		color = rb_color(node);
+	
+		if (child)
+			rb_set_parent(child, parent);
+		if (parent)
+		{
+			if (parent->rb_left == node)
+				parent->rb_left = child;
+			else
+				parent->rb_right = child;
+		}
+		else
+			root->rb_node = child;
+	
+	 color:
+		if (color == RB_BLACK)
+			__rb_erase_color(child, parent, root);
+	}
+	
+	/*
+	 * This function returns the first node (in sort order) of the tree.
+	 */
+	rb_node* ATLWrapper::rb_first(const rb_root *root)
+	{
+		rb_node	*n;
+	
+		n = root->rb_node;
+		if (!n)
+			return NULL;
+		while (n->rb_left)
+			n = n->rb_left;
+		return n;
+	}
+	
+	rb_node* ATLWrapper::rb_last(const rb_root *root)
+	{
+		rb_node	*n;
+	
+		n = root->rb_node;
+		if (!n)
+			return NULL;
+		while (n->rb_right)
+			n = n->rb_right;
+		return n;
+	}
+	
+	rb_node* ATLWrapper::rb_next(const rb_node *node)
+	{
+		rb_node *parent;
+	
+		if (rb_parent(node) == node)
+			return NULL;
+	
+		/* If we have a right-hand child, go down and then left as far
+		   as we can. */
+		if (node->rb_right) {
+			node = node->rb_right; 
+			while (node->rb_left)
+				node=node->rb_left;
+			return (rb_node *)node;
+		}
+	
+		/* No right-hand children.	Everything down and left is
+		   smaller than us, so any 'next' node must be in the general
+		   direction of our parent. Go up the tree; any time the
+		   ancestor is a right-hand child of its parent, keep going
+		   up. First time it's a left-hand child of its parent, said
+		   parent is our 'next' node. */
+		while ((parent = rb_parent(node)) && node == parent->rb_right)
+			node = parent;
+	
+		return parent;
+	}
+	
+	rb_node* ATLWrapper::rb_prev(const rb_node *node)
+	{
+		rb_node *parent;
+	
+		if (rb_parent(node) == node)
+			return NULL;
+	
+		/* If we have a left-hand child, go down and then right as far
+		   as we can. */
+		if (node->rb_left) {
+			node = node->rb_left; 
+			while (node->rb_right)
+				node=node->rb_right;
+			return (rb_node *)node;
+		}
+	
+		/* No left-hand children. Go up till we find an ancestor which
+		   is a right-hand child of its parent */
+		while ((parent = rb_parent(node)) && node == parent->rb_left)
+			node = parent;
+	
+		return parent;
+	}
+
+	log_map* ATLWrapper::log_map_search(rb_root * root, RSP_UINT32 lpn){
+
+		rb_node *node = root->rb_node;
+
+		while(node){
+			log_map *map_entry = container_of(node, log_map, node);
+			RSP_INT32 result = lpn - map_entry->lpn;
+
+			if(result < 0)
+				node = node->rb_left;
+			else if(result > 0)
+				node = node->rb_right;
+			else
+				return map_entry;
+		}
+		return NULL;
+	}
+
+	RSP_UINT32 ATLWrapper::log_map_insert(rb_root * root,log_map * map_entry){
+
+		rb_node **_new = &(root->rb_node), *parent = NULL, *prev = NULL;
+
+		while(*_new){
+
+			log_map *node = container_of(*_new, log_map, node);
+
+			RSP_INT32 result = (RSP_INT32)map_entry->lpn - (RSP_INT32)node->lpn;
+
+			parent = *_new;
+			if(result < 0)
+				_new = &((*_new)->rb_left);
+			else if(result > 0)
+				_new = &((*_new)->rb_right);
+			else{
+				//it means overwrite
+				rb_erase(&node->node, root);
+				log_map_insert(root, map_entry);
+				return 1;
+			}
+		}
+
+		rb_link_node(&map_entry->node, parent, _new);
+		rb_insert_color(&map_entry->node, root);
+		return 1;
+	}
+
+	RSP_VOID ATLWrapper::log_map_remove(rb_root * root,RSP_UINT32 lpn){
+
+		log_map *map_entry = log_map_search(root, lpn);
+
+		if(map_entry)
+			rb_erase(&map_entry->node, root);
+	}
+
+	RSP_VOID ATLWrapper::set_map_log(RSP_UINT32 channel,RSP_UINT32 bank,RSP_UINT32 lpn,RSP_UINT32 vpn){
+
+		rb_root *root = &NAND_bank_state[channel][bank].gc_map_tree;
+		RSP_UINT32 offset = vpn % (PLANES_PER_BANK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
+		log_map *map_entry = &NAND_bank_state[channel][bank].gc_map_log[offset];
+		map_entry->lpn = lpn;
+		map_entry->vpn = vpn;
+
+		log_map_insert(root, map_entry);
+	}
+
+	//we need to return the channel, bank number when set_vpn called this, because they need to erase the map log and update the map
+	log_map* ATLWrapper::get_map_log(RSP_UINT32 lpn, RSP_UINT32 *channel_, RSP_UINT32 *bank_){
+
+		log_map *map_entry = NULL;
+
+		for(RSP_UINT32 channel = 0; channel < NAND_NUM_CHANNELS; channel++){
+			for(RSP_UINT32 bank = 0; bank < BANKS_PER_CHANNEL; bank++){
+				rb_root *root = &NAND_bank_state[channel][bank].gc_map_tree;
+				map_entry = log_map_search(root, lpn);
+
+				if(map_entry){
+					if(channel_){
+						*channel_ = channel;
+						*bank_ = bank;
+					}
+					return map_entry;
+				}
+			}
+		}
+		return map_entry;
+	}
+
+	RSP_VOID ATLWrapper::flush_map_log(RSP_UINT32 channel,RSP_UINT32 bank){
+
+		rb_root *root = &NAND_bank_state[channel][bank].gc_map_tree;
+		rb_node *node;
+
+		for(node = rb_first(root); node; node = rb_next(node)){
+			log_map *map_entry = rb_entry(node, log_map, node);
+
+			RSP_ASSERT(map_entry->lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
+			RSP_ASSERT(map_entry->vpn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
+			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_log_flush, 1);
+			set_vpn(map_entry->lpn, map_entry->vpn, Prof_InterGC);
+		}
+		root->rb_node = NULL;
+	}
+	
 }

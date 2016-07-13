@@ -38,8 +38,6 @@ static void insert_buff(HIL_queue *q, HIL_buff *buff){
 		q->list->before = buff;
 	}
 	q->size++;
-	if (RSP_UINT32(q->list) == 0x33333333)
-		printf("!!");
 
 }
 
@@ -57,8 +55,6 @@ static void del_buff(HIL_queue *q, HIL_buff *buff){
 	q->size--;
 	if (q->size == 0)
 		q->list = NULL;
-	if (RSP_UINT32(q->list) == 0x33333333)
-		printf("!!");
 }
 
 static void *add_addr(RSP_VOID* start_addr, RSP_UINT32 offset)
