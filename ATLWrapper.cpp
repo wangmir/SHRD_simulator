@@ -1902,22 +1902,27 @@ namespace Hesper{
 
 				if (CACHE_MAPPING_TABLE[loop2] != (RSP_UINT32)VC_MAX)
 				{
-					//write victim 
-					if(flag == Prof_SW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
-					else if(flag == Prof_RW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
-					else if(flag == Prof_JN)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
-					else if(flag == Prof_JN_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
-					else if(flag == Prof_RW_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
-					else if(flag == Prof_IntraGC)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
-					else
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
-					map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
+
+					if(CACHE_MAP_DIRTY_TABLE[loop2] == true){
+						//write victim 
+						if(flag == Prof_SW)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
+						else if(flag == Prof_RW)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
+						else if(flag == Prof_JN)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
+						else if(flag == Prof_JN_remap)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
+						else if(flag == Prof_RW_remap)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
+						else if(flag == Prof_IntraGC)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
+						else
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
+
+						map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
+					}
+					CACHE_MAP_DIRTY_TABLE[loop2] = false;
 					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
 				}
 
@@ -2060,23 +2065,28 @@ namespace Hesper{
 
 				if (CACHE_MAPPING_TABLE[loop2] != (RSP_UINT32)VC_MAX)
 				{
-					//write victim 
-					if(flag == Prof_SW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
-					else if(flag == Prof_RW)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
-					else if(flag == Prof_JN)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
-					else if(flag == Prof_JN_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
-					else if(flag == Prof_RW_remap)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
-					else if(flag == Prof_IntraGC)
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
-					else
-						m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
-				
-					map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
+					
+					if(CACHE_MAP_DIRTY_TABLE[loop2] == true){	
+						//write victim 
+						if(flag == Prof_SW)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
+						else if(flag == Prof_RW)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
+						else if(flag == Prof_JN)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
+						else if(flag == Prof_JN_remap)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
+						else if(flag == Prof_RW_remap)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
+						else if(flag == Prof_IntraGC)
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
+						else
+							m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
+					
+						map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
+					}
+
+					CACHE_MAP_DIRTY_TABLE[loop2] = false;
 					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
 				}
 

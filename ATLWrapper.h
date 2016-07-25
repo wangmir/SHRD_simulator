@@ -30,7 +30,7 @@
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
 //test
-#define BLKS_PER_PLANE (128)
+#define BLKS_PER_PLANE (256)
 
 //#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
@@ -50,7 +50,7 @@
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 256 * KB; //2MB
+		static RSP_UINT32 CMT_size = 4 * MB; //2MB
 	
 		//Mapping data
 		

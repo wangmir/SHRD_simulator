@@ -519,14 +519,11 @@ static void run_shrd_workload() {
 
 	SHRD_host *HOST = new SHRD_host(HIL);
 
-	RSP_UINT32 total_write_pages = 48 * 262144; //110G
+	RSP_UINT32 total_write_pages = 8 * 262144; //110G
 
 	while (1) {
 		if(i % 100 == 0)
 			printf("-");
-
-		if (i == 33685)
-			printf("!!");
 
 		HOST->HOST_gen_random_workload();
 		if (HOST->write_amount > total_write_pages)
@@ -534,7 +531,7 @@ static void run_shrd_workload() {
 		i++;
 	}
 
-	HOST->HOST_verify_random_workload();
+	//HOST->HOST_verify_random_workload();
 
 	RSP_UINT32 *profile0 = VFL_0->profile;
 	RSP_UINT32 *profile1 = VFL_1->profile;
