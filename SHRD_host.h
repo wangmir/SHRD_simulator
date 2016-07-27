@@ -76,7 +76,7 @@ public:
 
 #define RANDOM_SEED 0x8fff
 
-#define LPN_RANGE (8 * 1024 * 256)
+#define LPN_RANGE (2 * 1024 * 256)
 
 #define HOST_ASSERT(bCondition) if (!(bCondition)) {printf("ASSERT!!");while(1);}
 

@@ -95,8 +95,6 @@ bool VFLWrapper::Issue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg){
 		seek += RSPOp[plane].nBlock;
 
 		RSP_UINT32 offset = RSPOp[plane].nPage;
-		if (seek == 460 && offset == 23)
-			printf("!!");
 		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
 
@@ -136,9 +134,6 @@ bool VFLWrapper::MetaIssue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg){
 		seek += RSPOp[plane].nBlock;
 
 		RSP_UINT32 offset = RSPOp[plane].nPage;
-
-		if (seek == 460 && offset == 23)
-			printf("!!");
 		_fseeki64(fp_data[CORE_ID], seek * VFL_BLOCK_DATA_SIZE + offset * RSP_BYTES_PER_PAGE, SEEK_SET);
 		fwrite((char *) RSPOp[plane].pData, RSP_BYTES_PER_PAGE, 1, fp_data[CORE_ID]);
 

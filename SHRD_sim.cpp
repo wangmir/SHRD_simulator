@@ -330,8 +330,6 @@ static void run_normal_trace(FILE *fp_in){
 		count /= 8;
 		for (RSP_UINT32 iter = 0; iter < count; iter++){
 			i++;
-			if (i == 16384)
-				printf("!!");
 			if (i % 5000 == 0)
 				printf("-");
 			HIL->HIL_WriteLPN(lpn + iter, 0xff, buff);
@@ -531,7 +529,7 @@ static void run_shrd_workload() {
 		i++;
 	}
 
-	//HOST->HOST_verify_random_workload();
+	HOST->HOST_verify_random_workload();
 
 	RSP_UINT32 *profile0 = VFL_0->profile;
 	RSP_UINT32 *profile1 = VFL_1->profile;

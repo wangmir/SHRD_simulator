@@ -15,7 +15,7 @@
 	
 		//FTL CORE
 #define NUM_FTL_CORE 2
-#define THIS_CORE (_COREID_ - 1) //should be changed into variable
+#define THIS_CORE (__COREID__ - 1) //should be changed into variable
 	
 		//RSP_MEM_API
 #define rspmalloc(a) RSPOSAL::RSP_MemAlloc(RSPOSAL::DRAM, a)
@@ -30,9 +30,9 @@
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
 //test
-#define BLKS_PER_PLANE (256)
+//#define BLKS_PER_PLANE (128)
 
-//#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
+#define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
 #define PLANES_PER_BANK RSP_NUM_PLANE
 #define BYTES_PER_SUPER_PAGE (RSP_BYTES_PER_PAGE * PLANES_PER_BANK)
@@ -43,14 +43,20 @@
 #define NUM_LOGICAL_BLOCK ((110 / NUM_FTL_CORE) * 1024)
 
 #define IS_DFTL (1) //FPM on off, when the FPM, CMT size must be 72MB
-#define IS_INCGC (0) //incremental GC on off
-#define IS_GCMAPLOG (0) //map logging on GC on/off
+#define IS_INCGC (1) //incremental GC on off
+#define IS_GCMAPLOG (1) //map logging on GC on/off
 #define NUM_READ_PER_INCGC 2
 
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 4 * MB; //2MB
+		static RSP_UINT32 CMT_size = 64 * KB; //2MB
+
+	struct cache_map{
+		RSP_UINT16 cache_slot;
+		RSP_UINT16 map_page;
+		cache_map *lru_next;	
+	};	//total 8-byte
 	
 		//Mapping data
 		
@@ -370,9 +376,12 @@ namespace Hesper{
 
 //DRAM MAP cache
 		RSP_UINT32 NUM_CACHED_MAP;
-		RSP_UINT32* CACHE_MAPPING_TABLE;
+		cache_map *CACHE_MAPPING_TABLE;
+		cache_map *CACHE_LRU_HEAD;
+		//RSP_UINT32* CACHE_MAPPING_TABLE;
+		//RSP_UINT32* cache_count;
 		RSP_UINT32* CACHE_ADDR;
-		RSP_UINT32* cache_count;
+		
 
 		RSP_UINT32* MAP_MAPPING_TABLE;
 		RSP_UINT32* MAP_VALID_COUNT;
@@ -440,6 +449,7 @@ namespace Hesper{
 		RSP_UINT32 assign_new_write_vpn_JN(RSP_UINT32 channel, RSP_UINT32 bank);
 		RSP_UINT32 assign_new_write_vpn_RW(RSP_UINT32 channel, RSP_UINT32 bank);
 
+		RSP_UINT16 get_map_page(RSP_UINT16 map_page, RSP_UINT32 flag);
 		RSP_UINT32 get_vpn(RSP_UINT32 lpn, RSP_UINT32 flag);
 		RSP_VOID set_vpn(RSP_UINT32 lpn, RSP_UINT32 vpn, RSP_UINT32 flag);
 		RSP_UINT32 get_vcount(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 block);

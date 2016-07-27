@@ -89,6 +89,7 @@ namespace Hesper{
 	RSP_BOOL
 		ATLWrapper::RSP_Open(RSP_VOID)
 	{
+	
 		RSP_UINT32 channel, bank, plane, block = 0, loop, profile_iter;
 		RSPEraseOp RSP_erase_ops[PLANES_PER_BANK];
 		NUM_PBLK = NAND_NUM_CHANNELS * BANKS_PER_CHANNEL * BLKS_PER_PLANE * PLANES_PER_BANK;
@@ -100,8 +101,8 @@ namespace Hesper{
 
 		CACHE_ADDR = (RSP_UINT32*)rspmalloc(CMT_size);
 #if IS_DFTL
-		CACHE_MAPPING_TABLE = (RSP_UINT32*)rspsmalloc(NUM_CACHED_MAP * sizeof_u32);
-		cache_count = (RSP_UINT32*)rspsmalloc(NUM_CACHED_MAP * sizeof_u32);
+		CACHE_MAPPING_TABLE = (cache_map *)rspsmalloc(NUM_CACHED_MAP * sizeof(cache_map));
+		CACHE_LRU_HEAD = NULL;
 #endif
 		//Map Mapping Table
 		MAP_MAPPING_TABLE = (RSP_UINT32*)rspmalloc(NUM_MAP_ENTRY * sizeof_u32); //GTD
@@ -315,7 +316,10 @@ namespace Hesper{
 		}
 		for (loop = 0; loop < NUM_CACHED_MAP; loop++){
 #if IS_DFTL
-			CACHE_MAPPING_TABLE[loop] = VC_MAX;
+			//CACHE_MAPPING_TABLE[loop] = VC_MAX;
+			CACHE_MAPPING_TABLE[loop].cache_slot = (RSP_UINT16)loop;
+			CACHE_MAPPING_TABLE[loop].map_page = (RSP_UINT16)VC_MAX;
+			CACHE_MAPPING_TABLE[loop].lru_next = NULL;
 #endif
 			CACHE_MAP_DIRTY_TABLE[loop] = false;
 		}
@@ -325,9 +329,6 @@ namespace Hesper{
 		for (loop = 0; loop < TOTAL_MAP_BLK * PAGES_PER_BLK; loop++)
 			MAPP2L[loop] = VC_MAX;
 		RSPOSAL::RSP_MemSet(CACHE_ADDR, 0xffffffff, CMT_size);
-#if IS_DFTL
-		RSPOSAL::RSP_MemSet(cache_count, 0xffffffff, NUM_CACHED_MAP * sizeof_u32);
-#endif
 
 		return true;
 	}
@@ -1823,47 +1824,27 @@ namespace Hesper{
 		return write_vpn;
 	}
 
-	
+	RSP_UINT16 ATLWrapper::get_map_page(RSP_UINT16 map_page, RSP_UINT32 flag){
 
-	//L2P management
-	///////////////////////////////////////////////////////////////////////////////
-	//get_vpn: return L2P table value
-	//lpn: logical page number
-	//map_latency latency is added this value
-	RSP_UINT32 ATLWrapper::get_vpn(RSP_UINT32 lpn, RSP_UINT32 flag)
-	{
-		RSP_UINT32 map_page, loop, loop2, return_val, cache_slot, map_page_offset;
-		map_page = lpn / NUM_PAGES_PER_MAP;
-		map_page_offset = lpn % NUM_PAGES_PER_MAP;
+		RSP_UINT16 cache_slot;
+		cache_map *iter, *tail = NULL, *prev = NULL;
 
-		if(lpn >= NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE){
-			dbg1 = lpn;
-			dbg2 = NUM_LBLK;
-			RSP_ASSERT(0);
-		}
-
-		//RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
-		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
-
-#if IS_GCMAPLOG
-		//confirm map log first
-		log_map *map_entry = get_map_log(lpn, NULL, NULL);
-		if(map_entry){
-			//map log hit
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_log_hit, 1);
-			return map_entry->vpn;
-		}
-#endif
-
-#if IS_DFTL
 		//check this map_page is in SRAM
-		for (loop = 0; loop < NUM_CACHED_MAP; loop++)
-		{
-			if (CACHE_MAPPING_TABLE[loop] == map_page)
+		iter = CACHE_LRU_HEAD;
+		while(iter != NULL){
+			if(iter->map_page == map_page)
 				break;
+					
+			if(iter->lru_next == NULL){
+				tail = iter;
+				iter = NULL;
+				break;
+			}
+			prev = iter;
+			iter = iter->lru_next;
 		}
-
-		if (loop == NUM_CACHED_MAP)
+		
+		if (iter == NULL)
 		{
 			//cache miss
 			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_miss, 1);
@@ -1871,7 +1852,7 @@ namespace Hesper{
 			{
 				//cache have empty slot
 				map_read(map_page, num_cached);
-				
+						
 				if(flag == Prof_SW)
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
 				else if(flag == Prof_RW)
@@ -1886,24 +1867,19 @@ namespace Hesper{
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-				
+		
 				cache_slot = num_cached;
 				num_cached++;
+						
 			}
 			else
 			{
 				//cache is full
 				//selete LRU victim
-				for (loop2 = 0; loop2 < NUM_CACHED_MAP; loop2++)
+				if (tail->map_page != (RSP_UINT16)VC_MAX)
 				{
-					if (cache_count[loop2] == NUM_CACHED_MAP)
-						break;
-				}
-
-				if (CACHE_MAPPING_TABLE[loop2] != (RSP_UINT32)VC_MAX)
-				{
-
-					if(CACHE_MAP_DIRTY_TABLE[loop2] == true){
+		
+					if(CACHE_MAP_DIRTY_TABLE[tail->cache_slot] == true){
 						//write victim 
 						if(flag == Prof_SW)
 							m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
@@ -1919,15 +1895,17 @@ namespace Hesper{
 							m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
 						else
 							m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
-
-						map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
+		
+						map_write(tail->map_page, tail->cache_slot); //sync
 					}
-					CACHE_MAP_DIRTY_TABLE[loop2] = false;
-					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
+					CACHE_MAP_DIRTY_TABLE[tail->cache_slot] = false;
+					tail->map_page = (RSP_UINT16)VC_MAX;
+							
 				}
-
-				map_read(map_page, loop2);
-				
+		
+				map_read(map_page, tail->cache_slot);
+				cache_slot = tail->cache_slot;
+						
 				if(flag == Prof_SW)
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
 				else if(flag == Prof_RW)
@@ -1942,64 +1920,92 @@ namespace Hesper{
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
 				else
 					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-				
-				cache_slot = loop2;
+		
 			}
-
-			CACHE_MAPPING_TABLE[cache_slot] = map_page;
-
-			if(flag >= Prof_IntraGC){
-				//when the map load is occured at the GC period, then the map should be LRU (not MRU)
-				cache_count[cache_slot] = num_cached;
+		
+			if(CACHE_LRU_HEAD == NULL)
+				CACHE_LRU_HEAD = &CACHE_MAPPING_TABLE[cache_slot];
+			else if(flag < Prof_IntraGC || tail != &CACHE_MAPPING_TABLE[cache_slot]){
+				//insert into MRU
+				//tail != CACHE_MAPPING_TABLE[cache_slot] means the cache slot is new entry
+				if((tail == &CACHE_MAPPING_TABLE[cache_slot]) && (prev != NULL))
+					prev->lru_next = NULL;
+				CACHE_MAPPING_TABLE[cache_slot].lru_next = CACHE_LRU_HEAD;
+				CACHE_LRU_HEAD = &CACHE_MAPPING_TABLE[cache_slot];
 			}
-			else{
-				for(loop = 0; loop < num_cached; loop++)
-					cache_count[loop]++;
-				cache_count[cache_slot] = 1;
-			}
-			
+			//else: insert into LRU because the map page is for the GC
+			CACHE_MAPPING_TABLE[cache_slot].map_page = map_page;
+					
 		}
 		else
 		{
 			//cache hit
 			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_hit, 1);
-			//update LRU value
-			for (loop2 = 0; loop2 < num_cached; loop2++)
-			{
-				if (cache_count[loop2] < cache_count[loop])
-					cache_count[loop2]++;
+		
+			//prev == NULL means the entry is already MRU
+			if(flag < Prof_IntraGC && prev != NULL){
+				//move entry into MRU
+				prev->lru_next = iter->lru_next;
+				iter->lru_next = CACHE_LRU_HEAD;
+				CACHE_LRU_HEAD = iter;
 			}
-			cache_count[loop] = 1;
-			cache_slot = loop;
+					
+			cache_slot = iter->cache_slot;
 			//latency is 0
 		}
 
-		RSPOSAL::RSP_MemCpy(&return_val, (RSP_UINT32 *)add_addr(CACHE_ADDR, (cache_slot * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), sizeof_u32);
-#else
-		RSPOSAL::RSP_MemCpy(&return_val, (RSP_UINT32 *)add_addr(CACHE_ADDR, (map_page * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), sizeof_u32);
-#endif
-		
-		if(return_val > NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE && return_val != VC_MAX && !is_in_write_buffer(return_val)){
-			dbg1 = map_page;
-			dbg2 = cache_slot;
-			dbg3 = map_page_offset;
-			dbg4 = lpn; 
-			dbg5 = return_val;
-			map_validation_check();
+		return cache_slot;
+	}
+
+	//L2P management
+	///////////////////////////////////////////////////////////////////////////////
+	//get_vpn: return L2P table value
+	//lpn: logical page number
+	//map_latency latency is added this value
+	RSP_UINT32 ATLWrapper::get_vpn(RSP_UINT32 lpn, RSP_UINT32 flag)
+	{
+		RSP_UINT16 map_page, cache_slot;
+		RSP_UINT32 return_val, map_page_offset;
+		map_page = (RSP_UINT16)(lpn / NUM_PAGES_PER_MAP);
+		map_page_offset = lpn % NUM_PAGES_PER_MAP;
+
+		if(lpn >= NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE){
+			dbg1 = lpn;
+			dbg2 = NUM_LBLK;
 			RSP_ASSERT(0);
 		}
+		RSP_ASSERT(map_page < NUM_MAP_ENTRY * LPAGE_PER_PPAGE);
+
+#if IS_GCMAPLOG
+		//confirm map log first
+		log_map *map_entry = get_map_log(lpn, NULL, NULL);
+		if(map_entry){
+			//map log hit
+			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_log_hit, 1);
+			return map_entry->vpn;
+		}
+#endif
+
+#if IS_DFTL
+		cache_slot = get_map_page(map_page, flag);
+
+		RSPOSAL::RSP_MemCpy(&return_val, (RSP_UINT32 *)add_addr(CACHE_ADDR, ((RSP_UINT32)cache_slot * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), sizeof_u32);
+#else
+		RSPOSAL::RSP_MemCpy(&return_val, (RSP_UINT32 *)add_addr(CACHE_ADDR, ((RSP_UINT32)map_page * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), sizeof_u32);
+#endif
 			
-		//RSP_ASSERT(return_val < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || return_val == VC_MAX || is_in_write_buffer(return_val));
+		RSP_ASSERT(return_val < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || return_val == VC_MAX || is_in_write_buffer(return_val));
 		return return_val;
 	}
+	
 	//set_vpn: set L2P table value
 	//lpn: logical page number
 	//map_latency latency is added this value
-
 	RSP_VOID ATLWrapper::set_vpn(RSP_UINT32 lpn, RSP_UINT32 vpn, RSP_UINT32 flag)
 	{
-		RSP_UINT32 map_page, loop, loop2, cache_slot, map_page_offset;
-		map_page = lpn / NUM_PAGES_PER_MAP;
+		RSP_UINT16 map_page, cache_slot;
+		RSP_UINT32 return_val, map_page_offset;
+		map_page = (RSP_UINT16)(lpn / NUM_PAGES_PER_MAP);
 		map_page_offset = lpn % NUM_PAGES_PER_MAP;
 
 		RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
@@ -2018,130 +2024,12 @@ namespace Hesper{
 #endif
 		
 #if IS_DFTL
-		//check this map_page is in DRAM
-		for (loop = 0; loop < NUM_CACHED_MAP; loop++)
-		{
-			if (CACHE_MAPPING_TABLE[loop] == map_page)
-				break;
-		}
+		cache_slot = get_map_page(map_page, flag);
 
-		if (loop == NUM_CACHED_MAP)
-		{
-			//cache miss
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_miss, 1);
-			if (num_cached != NUM_CACHED_MAP)
-			{
-				//cache have empty slot
-
-				map_read(map_page, num_cached);
-				
-				if(flag == Prof_SW)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
-				else if(flag == Prof_RW)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_load, 1);
-				else if(flag == Prof_JN)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_load, 1);
-				else if(flag == Prof_JN_remap)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_load, 1);
-				else if(flag == Prof_RW_remap)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_load, 1);
-				else if(flag == Prof_IntraGC)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
-				else
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-
-				cache_slot = num_cached;
-				num_cached++;
-			}
-			else
-			{
-				//cache is full
-				//selete LRU victim
-				for (loop2 = 0; loop2 < NUM_CACHED_MAP; loop2++)
-				{
-					if (cache_count[loop2] == NUM_CACHED_MAP)
-						break;
-				}
-
-				if (CACHE_MAPPING_TABLE[loop2] != (RSP_UINT32)VC_MAX)
-				{
-					
-					if(CACHE_MAP_DIRTY_TABLE[loop2] == true){	
-						//write victim 
-						if(flag == Prof_SW)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_write, 1);
-						else if(flag == Prof_RW)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_write, 1);
-						else if(flag == Prof_JN)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_write, 1);
-						else if(flag == Prof_JN_remap)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_write, 1);
-						else if(flag == Prof_RW_remap)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_write, 1);
-						else if(flag == Prof_IntraGC)
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_write, 1);
-						else
-							m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_write, 1);
-					
-						map_write(CACHE_MAPPING_TABLE[loop2], loop2); //sync
-					}
-
-					CACHE_MAP_DIRTY_TABLE[loop2] = false;
-					CACHE_MAPPING_TABLE[loop2] = (RSP_UINT32)VC_MAX;
-				}
-
-				map_read(map_page, loop2);
-				
-				if(flag == Prof_SW)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_SW_map_load, 1);
-				else if(flag == Prof_RW)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_map_load, 1);
-				else if(flag == Prof_JN)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_map_load, 1);
-				else if(flag == Prof_JN_remap)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_map_load, 1);
-				else if(flag == Prof_RW_remap)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_RW_Remap_map_load, 1);
-				else if(flag == Prof_IntraGC)
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_IntraGC_map_load, 1);
-				else
-					m_pVFLWrapper->RSP_INC_ProfileData(Prof_InterGC_map_load, 1);
-
-				cache_slot = loop2;
-			}
-
-			CACHE_MAPPING_TABLE[cache_slot] = map_page;
-
-			if(flag >= Prof_IntraGC){
-				//when the map load is occured at the GC period, then the map should be LRU (not MRU)
-				cache_count[cache_slot] = num_cached;
-			}
-			else{
-				for(loop = 0; loop < num_cached; loop++)
-					cache_count[loop]++;
-				cache_count[cache_slot] = 1;
-			}
-			
-		}
-		else
-		{
-			//cache hit
-			m_pVFLWrapper->RSP_INC_ProfileData(Prof_map_hit, 1);
-			//update LRU value
-			for (loop2 = 0; loop2 < num_cached; loop2++)
-			{
-				if (cache_count[loop2] < cache_count[loop])
-					cache_count[loop2]++;
-			}
-			cache_count[loop] = 1;
-			cache_slot = loop;
-			//latency is 0
-		}
-
-		RSPOSAL::RSP_MemCpy((RSP_UINT32 *)add_addr(CACHE_ADDR, (cache_slot * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), &vpn, sizeof_u32);
+		RSPOSAL::RSP_MemCpy((RSP_UINT32 *)add_addr(CACHE_ADDR, ((RSP_UINT32)cache_slot * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), &vpn, sizeof_u32);
 		CACHE_MAP_DIRTY_TABLE[cache_slot] = true;
 #else
-		RSPOSAL::RSP_MemCpy((RSP_UINT32 *)add_addr(CACHE_ADDR, (map_page * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), &vpn, sizeof_u32);
+		RSPOSAL::RSP_MemCpy((RSP_UINT32 *)add_addr(CACHE_ADDR, ((RSP_UINT32)map_page * BYTES_PER_SUPER_PAGE) + map_page_offset * sizeof_u32), &vpn, sizeof_u32);
 		CACHE_MAP_DIRTY_TABLE[map_page] = true;
 #endif
 
@@ -3266,7 +3154,7 @@ do_erase:
 			{
 				CACHE_MAP_DIRTY_TABLE[loop] = false;
 #if IS_DFTL
-				map_write(CACHE_MAPPING_TABLE[loop], loop);
+				map_write(CACHE_MAPPING_TABLE[loop].map_page, loop);
 #else
 				map_write(loop, loop);
 #endif
