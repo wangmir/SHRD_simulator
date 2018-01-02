@@ -6,7 +6,8 @@
 #include "SHRD_host.h"
 
 using namespace Hesper;
-
+#define NUM_MAX_TWRITE_ENTRY 256
+#define NUM_MAX_REMAP_ENTRY 32
 
 struct SHRD_TWRITE_HEADER {
 	RSP_UINT32 t_addr_start; 		//indicate WAL log start page addr

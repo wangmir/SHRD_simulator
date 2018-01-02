@@ -45,6 +45,9 @@ struct CMD_LINE{
 	RSP_UINT32 count;
 };
 
+#define NUM_MAX_TWRITE_ENTRY 256
+#define NUM_MAX_REMAP_ENTRY 32
+
 struct SHRD_TWRITE_HEADER{
 	RSP_UINT32 t_addr_start; 		//indicate WAL log start page addr
 	RSP_UINT32 io_count; 		//indicate how many writes (page) will be requested
@@ -409,6 +412,10 @@ static void run_normal_workload() {
 
 		if (i > total_write_pages)
 			break;
+		if (i == 1500000)
+			int j = 3;
+		//if (i % 40000 == 0)
+		//	HOST->HOST_verify_random_workload();
 		i++;
 	}
 
@@ -527,6 +534,7 @@ static void run_shrd_workload() {
 		if (HOST->write_amount > total_write_pages)
 			break;
 		i++;
+		
 	}
 
 	HOST->HOST_verify_random_workload();
@@ -566,9 +574,9 @@ void main(int argc, char *argv[]){
 
 	//run_trace(fp_in);
 	//run_normal_trace(fp_in);
-	//run_normal_workload();
+	run_normal_workload();
 	//run_sequential_filling();
-	run_shrd_workload();
+	//run_shrd_workload();
 }
 
 

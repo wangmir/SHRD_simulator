@@ -67,21 +67,21 @@ class VFLWrapper
 		void HIL_ptr(void *pHIL);
 
 		void INC_PROGRAMPENDING();
-		void WAIT_PROGRAMPENDING(RSP_UINT32 *dbg);
+		void WAIT_PROGRAMPENDING();
 		void INC_ERASEPENDING();
-		void WAIT_ERASEPENDING(RSP_UINT32 *dbg);
+		void WAIT_ERASEPENDING();
 		void INC_READPENDING();
-		void WAIT_READPENDING(RSP_UINT32 *dbg);
+		void WAIT_READPENDING();
 		void _GetSpareData(RSP_UINT32* spare_buf);
 	
-		bool Issue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
-		bool Issue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
-		bool Issue(RSPEraseOp RSPOp[4], RSP_UINT32 *dbg);
+		bool Issue(RSPProgramOp RSPOp[4]);
+		bool Issue(RSPReadOp RSPOp);
+		bool Issue(RSPEraseOp RSPOp[4]);
 
 		bool test();
 
-		bool MetaIssue(RSPProgramOp RSPOp[4], RSP_UINT32 *dbg);
-		bool MetaIssue(RSPReadOp RSPOp, RSP_UINT32 *dbg);
+		bool MetaIssue(RSPProgramOp RSPOp[4]);
+		bool MetaIssue(RSPReadOp RSPOp);
 
 		RSP_UINT32 VFL_Timer_GetTimeTick();
 
