@@ -24,9 +24,83 @@ namespace Hesper
 	RSP_UINT32 NUM_LBLK;
 	RSP_UINT32 NUM_PBLK;
 	//RSP_UINT32 CMT_size = 1024 * KB; //2MB
-	RSP_UINT32 CMT_size = 256*KB; //2MB
+	RSP_UINT32 CMT_size = 32 * MB; //2MB
 	RSP_UINT8 Flush_method = META_FLUSH;
-	RSP_UINT32 *DB_GC;
+	static RSP_BOOL flush_bank_start = true;
+
+	volatile RSP_UINT32 dbg1 = 0;
+	volatile RSP_UINT32 dbg2 = 0;	//READ_DATA2BUFFER
+	volatile RSP_UINT32 dbg3 = 0;
+	volatile RSP_UINT32 dbg4 = 0;
+	volatile RSP_UINT32 dbg5 = 0;
+	volatile RSP_UINT32 dbg6 = 0;
+	volatile RSP_UINT32 dbg7 = 0;
+	volatile RSP_UINT32 dbg8 = 0;
+
+	static special_command *sc;
+	static special_command *sc_other;
+	static RSP_UINT32 real_copy_count;
+
+	static VFLWrapper* m_pVFLWrapper;
+	static NAND_bankstat* NAND_bank_state[NAND_NUM_CHANNELS];
+
+	// Map management
+	static RSP_UINT32 NUM_CACHED_MAP[2];
+	static cached_map_list* CACHE_MAPPING_TABLE[2]; //map table for cache
+	static cached_map_list* CACHED_MAP_HEAD[2];
+	static RSP_UINT32* CACHE_ADDR[2]; //cached map
+
+	static RSP_UINT32* MAP_MAPPING_TABLE[2]; //GTD (Global Translation Directory)
+	static RSP_UINT16* P2L_VALID_COUNT;
+	static RSP_UINT32* MAP_VALID_COUNT[2];
+	static RSP_UINT32* MAPP2L[2];
+	static RSP_BOOL* CACHE_MAP_DIRTY_TABLE[2];
+	static RSP_UINT32 num_cached[2];
+
+	//Vcount management
+	static RSP_UINT32* VCOUNT;
+
+	//Valid bitmap management
+	static RSP_UINT32* VALID;
+	static RSP_BOOL* VALID_DIRTY;
+
+
+	//LPN_list management
+	static LPN_list* LPN_ADDR;
+	static LPN_head LPN_LIST_HEAD;
+	static RSP_UINT32 free_list_count;
+
+
+
+	static SM_struct *SM_value = NULL;
+	static RSP_UINT32* pHILK2L = NULL;
+	//bank allocation
+	static RSP_UINT32 ATL_cur_write_bank;
+	static RSP_UINT32 ATL_meta_cur_write_bank;
+	static RSP_UINT32 ATL_metadata_cur_write_bank;
+
+	RSP_UINT32* writebuf_addr[PLANES_PER_BANK];
+	RSP_SECTOR_BITMAP writebuf_data_bitmap[PLANES_PER_BANK];
+	RSP_UINT8 writebuf_bitmap;
+	RSP_SECTOR_BITMAP writebuf_orig_data_bitmap[PLANES_PER_BANK];
+	RSP_UINT32 writebuf_index;
+	RSP_UINT32 writebuf_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE][SPARE_LPNS];
+	RSP_UINT32 writebuf_orig_lpn[PLANES_PER_BANK][LPAGE_PER_PPAGE];
+
+	RSP_UINT32 flush_bank_counter;
+
+
+	//meta_write
+	static RSP_UINT32* meta_write_buffer;
+	static RSP_UINT32* one_realcopy_buffer;
+	static RSP_UINT32 meta_write_count;
+	static RSP_UINT32 meta_write_lpn[PLANES_PER_BANK][NUM_SPARE_LPN * LPAGE_PER_PPAGE][SPARE_LPNS];
+
+	//VC struct log
+	static RSP_UINT32 cur_VC_lpn;
+	static special_command *cur_VC_struct;
+	static RSP_UINT32 pending_VC_count;
+	static RSP_UINT32 free_VC_lpn;
 
 	static RSP_BOOL BG_IC_enabled = false;//true;
 #ifdef __NAND_virtual
@@ -37,12 +111,6 @@ namespace Hesper
 		__COREID__ = core_id;
 	}
 #endif
-	//overloading function for simulator
-	ATLWrapper::ATLWrapper(VFLWrapper* pVFL, RSP_UINT32 CORE_ID) {
-
-		m_pVFLWrapper = pVFL;
-		_COREID_ = CORE_ID;
-	}
 
 	ATLWrapper::ATLWrapper(VFLWrapper* pVFL)
 	{
@@ -575,11 +643,11 @@ namespace Hesper
 		for (iter = 0; iter < sc->command_count; iter++)
 		{ 
 		
-			if (sc->command_entry[iter].src_LPN % NUM_FTL_CORE != THIS_CORE)  //
+			if (sc->command_entry[iter].src_LPN % NUM_FTL_CORE != __COREID__ - 1)  //
 				continue;
 
 
-			if (sc->command_entry[iter].dst_LPN % NUM_FTL_CORE != THIS_CORE)
+			if (sc->command_entry[iter].dst_LPN % NUM_FTL_CORE != __COREID__ - 1)
 			{//for other core
 				m_pVFLWrapper->RSP_INC_ProfileData(Prof_Remap_VC_Intercore_count, 1);
 				sc_other->command_entry[sc_other->command_count].dst_LPN = _FTL_ReadData2Buffer(sc->command_entry[iter].src_LPN / NUM_FTL_CORE, sc->command_type[iter]);
@@ -719,6 +787,7 @@ namespace Hesper
 		}
 #endif
 		if(dec_valid)
+			if (get_valid(channel, bank, (old_ppn) % (PAGES_PER_BANK * LPAGE_PER_PPAGE)))
 				{
 					set_vcount(channel, bank, block, get_vcount(channel, bank, block) - 1);
 					clear_valid(channel, bank, (old_ppn) % (PAGES_PER_BANK * LPAGE_PER_PPAGE));
@@ -1210,7 +1279,7 @@ namespace Hesper
 		}
 		else
 		{
-			RSPOSAL::RSP_MemSet(BufferAddress, 0x00, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
+			RSPOSAL::RSP_MemSet(BufferAddress, 0xFF, RSP_BYTES_PER_PAGE / LPAGE_PER_PPAGE);
 			ret_value = ReadError;
 
 		}
@@ -1296,7 +1365,7 @@ namespace Hesper
 		}
 
 		
-		/*if (pHILK2L == NULL)
+		if (pHILK2L == NULL)
 		{
 			if (THIS_CORE == 0)
 			{
@@ -1328,7 +1397,7 @@ namespace Hesper
 					pHILK2L = NULL;
 			}
 
-		}*/
+		}
 		Check_other_core_read();
 		return ret;
 	}
@@ -1558,9 +1627,11 @@ namespace Hesper
 #ifdef ATL_ASSERTION_TEST
 					RSP_ASSERT(get_vcount(channel, bank, block) != 0);
 #endif
-
+					if(get_valid(channel, bank, old_ppn * LPAGE_PER_PPAGE + vpage_offset))
+					{
 						set_vcount(channel, bank, block, get_vcount(channel, bank, block) - 1);
 						clear_valid(channel, bank, old_ppn * LPAGE_PER_PPAGE + vpage_offset);
+					}
 				}
 			}
 		}
@@ -1729,15 +1800,10 @@ namespace Hesper
 			
 
 			set_vcount(channel, bank, block, get_vcount(channel, bank, block) + valid_count);
-			channel = channel ^ 1;
+			channel = channel ^ 2;
 
 			if(NAND_bank_state[channel][bank].free_blk_list.count <= 5)
-				for(int iter = 0; iter < 3; iter++)
-					while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
-			if (NAND_bank_state[channel][bank].free_blk_list.count == 0)
-				while (incremental_garbage_collection(channel, bank, Prof_FGC) != 2);
-			if (NAND_bank_state[channel][bank].GCbuf_index != 0)
-				dbg1++;
+				while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
 			//test_buffer_flush_value = 0;
 
 		}
@@ -1808,7 +1874,7 @@ namespace Hesper
 		if(do_flush && ATL_cur_write_bank == NAND_NUM_CHANNELS * BANKS_PER_CHANNEL - 1)
 			{
 				flush_bank_counter++;
-				//dummy_buffer_flush();
+				dummy_buffer_flush();
 			}
 		
 
@@ -1842,10 +1908,8 @@ namespace Hesper
 	{
 	
 		RSP_UINT32 cache_slot = lpn / 8192;
-		if (_COREID_ == 1 && lpn == 60480)
-			dbg1++;
-		if (_COREID_ == 1 && ppn == 81216 && lpn == 60480)
-			dbg1++;
+
+
 #ifdef ATL_ASSERTION_TEST
 		RSP_ASSERT(lpn < NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 		RSP_ASSERT(ppn < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE || ppn == VC_MAX || is_in_write_buffer(ppn) || is_in_realcopy(ppn) || is_in_virtual(ppn));
@@ -2063,14 +2127,10 @@ namespace Hesper
 #ifdef ATL_ASSERTION_TEST
 		RSP_ASSERT(index < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 #endif
-		if (_COREID_ == 1 && channel == 0 && bank == 0 && ppn == 85134)
-			dbg1++;
-		if (_COREID_ == 1 && channel == 0 && bank == 0 && ppn == 81216)
-			dbg1++;
 		offset = index % BIT_PER_RSP_UINT32;
 		index = index / BIT_PER_RSP_UINT32;
 		VALID_DIRTY[index / BYTES_PER_SUPER_PAGE * sizeof(RSP_UINT32)] = true;
-		RSP_ASSERT(!get_valid(channel, bank, ppn));
+		
 		VALID[index] |= 1 << offset;
 	}
 	RSP_BOOL ATLWrapper::get_valid(RSP_UINT32 channel, RSP_UINT32 bank, RSP_UINT32 ppn)
@@ -2095,14 +2155,10 @@ namespace Hesper
 #ifdef ATL_ASSERTION_TEST
 		RSP_ASSERT(index < NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE);
 #endif
-		if (_COREID_ == 1 && channel == 0 && bank == 0 && ppn == 85134)
-			dbg1++;
-		if (_COREID_ == 1 && channel == 0 && bank == 0 && ppn == 81216)
-			dbg1++;
 		offset = index % BIT_PER_RSP_UINT32;
 		index = index / BIT_PER_RSP_UINT32;
 		VALID_DIRTY[index / BYTES_PER_SUPER_PAGE * sizeof(RSP_UINT32)] = true;
-		RSP_ASSERT(get_valid(channel, bank, ppn));
+
 		VALID[index] ^= (1 << offset);
 	}
 
@@ -2136,7 +2192,6 @@ namespace Hesper
 		test_count(vcount);
 		test_count(cpy_count);*/
 	}
-	int MAX_GC_vcount = 0;
 	RSP_UINT8 ATLWrapper::incremental_garbage_collection(RSP_UINT32 channel,RSP_UINT32 bank, RSP_UINT8 flag)
 	{
 		RSP_UINT32 plane, high_low, vt_block, gc_block, free_ppn, src_page, spare_area[LPAGE_PER_PPAGE][SPARE_LPNS], old_ppn, buf_offset, new_ppn = NULL;
@@ -2150,8 +2205,6 @@ namespace Hesper
 		if(NAND_bank_state[channel][bank].GC_victim_blk == VC_MAX)
 		{
 			vt_block = get_vt_vblock(channel, bank);
-			if (MAX_GC_vcount <= get_vcount(channel, bank, vt_block))
-				MAX_GC_vcount = get_vcount(channel, bank, vt_block);
 			if(vt_block == VC_MAX)
 				return 1;
 			NAND_bank_state[channel][bank].GC_victim_blk = vt_block;
@@ -2253,8 +2306,7 @@ namespace Hesper
 						}
 						else
 						{
-							if (ppn == VC_MAX)
-								RSP_ASSERT(0);
+
 							if (LPN_ADDR[ppn].next == VC_MAX)
 							{
 								RSP_ASSERT(0);
@@ -2303,8 +2355,6 @@ namespace Hesper
 							}
 							else
 							{
-								if (ppn == VC_MAX)
-									RSP_ASSERT(0);
 								if (LPN_ADDR[ppn].next == VC_MAX)
 								{
 									RSP_ASSERT(0);
@@ -2328,8 +2378,7 @@ namespace Hesper
 					{
 						new_ppn = free_ppn++;
 						GC_write_buffer(channel, bank, new_ppn, flag);
-						if(!copy_after_write)
-							return_val = 1;
+						return_val = 1;
 						
 					}
 
@@ -2362,8 +2411,6 @@ namespace Hesper
 							}
 							else
 							{
-								if (ppn == VC_MAX)
-									RSP_ASSERT(0);
 								if (LPN_ADDR[ppn].next == VC_MAX)
 								{
 									RSP_ASSERT(0);
@@ -2423,8 +2470,6 @@ namespace Hesper
 						}
 						else
 						{
-							if (ppn == VC_MAX)
-								RSP_ASSERT(0);
 							if (LPN_ADDR[ppn].next == VC_MAX)
 							{
 								RSP_ASSERT(0);
@@ -2484,23 +2529,7 @@ namespace Hesper
 				}
 			}
 			return_val = 2;
-			if (channel == 1 && bank == 0, vt_block == 33)
-				dbg1++;
-			//valid_bitmap test
-			{
-				RSP_UINT32 tCh, tbank, tpage, tplane, thigh_low, told_page;
-				for (tpage = 0; tpage < PAGES_PER_BLK; tpage++)
-					for (tplane = 0; tplane < PLANES_PER_BANK; tplane++)
-						for (thigh_low = 0; thigh_low < 2; thigh_low++)
-						{
-							told_page = (vt_block * PLANES_PER_BANK * PAGES_PER_BLK) + (tplane * PAGES_PER_BLK) + (tpage % PAGES_PER_BLK);
-							if (channel == 1 && bank == 0 && told_page * LPAGE_PER_PPAGE + thigh_low == 33828)
-								dbg1++;
-							if (get_valid(channel, bank, told_page * LPAGE_PER_PPAGE + thigh_low))
-								RSP_ASSERT(0);
-						}
-			}
-		
+			
 
 			NAND_bank_state[channel][bank].GC_victim_blk = VC_MAX;
 			
@@ -2522,7 +2551,7 @@ namespace Hesper
 				set_vcount(channel, bank, vt_block, 0);
 			}
 
-			//dummy_buffer_flush();
+			dummy_buffer_flush();
 		}
 		NAND_bank_state[channel][bank].GC_src_page = src_page;
 		NAND_bank_state[channel][bank].GC_plane = plane;
@@ -2727,8 +2756,8 @@ namespace Hesper
 
 		NUM_PBLK = NAND_NUM_CHANNELS * BANKS_PER_CHANNEL * BLKS_PER_PLANE * PLANES_PER_BANK;
 		//NUM_LBLK = NUM_PBLK - OP_BLKS;
-		NUM_LBLK = NAND_NUM_CHANNELS * BANKS_PER_CHANNEL * BLKS_PER_PLANE * PLANES_PER_BANK - OP_BLKS;
-		NUM_CACHED_MAP[L2P] = (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE) / (BYTES_PER_SUPER_PAGE)* 4;
+		NUM_LBLK = NAND_NUM_CHANNELS * BANKS_PER_CHANNEL * RSP_BLOCK_PER_PLANE * PLANES_PER_BANK - OP_BLKS;
+		NUM_CACHED_MAP[L2P] = CMT_size / (BYTES_PER_SUPER_PAGE);
 		NUM_CACHED_MAP[P2L] = CMT_size / (BYTES_PER_SUPER_PAGE);
 		VCOUNT = (RSP_UINT32*)rspmalloc(NUM_PBLK * sizeof_u32);
 		VALID = (RSP_UINT32*)rspmalloc(NUM_PBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE / BIT_PER_BYTES);
@@ -2909,7 +2938,7 @@ namespace Hesper
 				
 				for(loop = 0; loop < BLKS_PER_PLANE;loop++)
 					NAND_bank_state[channel][bank].blk_list[loop].block_offset = loop;
-				dbg1 = 0;
+				
 			}
 		}
 		for (loop = 0; loop < NUM_CACHED_MAP[P2L]; loop++){
@@ -2992,7 +3021,7 @@ namespace Hesper
 		RSPOSAL::RSP_MemSet(JBD_state, 0x00, 131072 * sizeof(RSP_UINT32));
 		debug_sc = (special_command*)rspmalloc(sizeof(special_command) * 5000);
 #endif
-		DB_GC = (RSP_UINT32*)add_addr(CACHE_ADDR[L2P], 60480 * sizeof_u32);
+
 		//Profile init
 		for(loop = 0; loop < Prof_total_num;loop++)
 			m_pVFLWrapper->RSP_SetProfileData(loop,0);
@@ -3375,15 +3404,10 @@ namespace Hesper
 			m_pVFLWrapper->WAIT_PROGRAMPENDING();
 #endif		
 
-		channel = channel ^ 1;
+		channel = channel ^ 2;
 
 		if(NAND_bank_state[channel][bank].free_blk_list.count <= 5)
-			for (int iter = 0; iter < 3; iter++)
-				while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
-		if (NAND_bank_state[channel][bank].free_blk_list.count == 0)
-			while (incremental_garbage_collection(channel, bank, Prof_FGC) != 2);
-		if (NAND_bank_state[channel][bank].GCbuf_index != 0)
-			dbg1++;
+			while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
 	}
 	RSP_VOID ATLWrapper::meta_buffer_flush()
 	{
@@ -3467,15 +3491,10 @@ namespace Hesper
 		}
 		set_vcount(channel, bank, block, get_vcount(channel, bank, block) + valid_count);
 
-		channel = channel ^ 1;
+		channel = channel ^ 2;
 
 		if(NAND_bank_state[channel][bank].free_blk_list.count <= 5)
-			for (int iter = 0; iter < 3; iter++)
-				while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
-		if (NAND_bank_state[channel][bank].free_blk_list.count == 0)
-			while (incremental_garbage_collection(channel, bank, Prof_FGC) != 2);
-		if (NAND_bank_state[channel][bank].GCbuf_index != 0)
-			dbg1++;
+			while(incremental_garbage_collection(channel, bank, Prof_FGC) == 0);
 		ATL_meta_cur_write_bank = (ATL_meta_cur_write_bank + 1) % (RSP_NUM_CHANNEL * BANKS_PER_CHANNEL);
 	}
 	RSP_VOID ATLWrapper::bank_meta_flush(RSP_UINT32 channel, RSP_UINT32 bank)
@@ -3547,8 +3566,8 @@ namespace Hesper
 		block = get_block((ppn / LPAGE_PER_PPAGE) % PAGES_PER_BANK);
 		page = (ppn / LPAGE_PER_PPAGE) % PAGES_PER_BLK;
 		
-		/*RSP_ASSERT(pstBlockInfo[BLOCK_INDEX(channel, bank, block)].BlockErase == 0);
-		RSP_ASSERT(pstBlockInfo[BLOCK_INDEX(channel, bank, block)].PageCount > page);*/
+		RSP_ASSERT(pstBlockInfo[BLOCK_INDEX(channel, bank, block)].BlockErase == 0);
+		RSP_ASSERT(pstBlockInfo[BLOCK_INDEX(channel, bank, block)].PageCount > page);
 	}
 
 	RSP_UINT32 ATLWrapper::_FTL_ReadData2Buffer(RSP_UINT32 nLPN, RSP_UINT32 mode)
@@ -3591,6 +3610,7 @@ namespace Hesper
 				dec_valid = true;
 			}
 			if(dec_valid)
+				if(get_valid(channel, bank, ppn % (PAGES_PER_BANK * LPAGE_PER_PPAGE)))
 				{
 					set_vcount(channel, bank, block, get_vcount(channel, bank, block) - 1);
 					clear_valid(channel, bank, ppn % (PAGES_PER_BANK * LPAGE_PER_PPAGE));
@@ -4198,8 +4218,6 @@ void ATLWrapper::FTL_Idle(void)
 		if(NAND_bank_state[channel][bank].free_blk_list.count <= BGC_THRESHOLD) // BGC
 		{
 			while(!incremental_garbage_collection(channel, bank, Prof_BGC));
-			if (NAND_bank_state[channel][bank].GCbuf_index != 0)
-				dbg1++;
 		}
 		GC_bank = (GC_bank + 1) % (RSP_NUM_CHANNEL * BANKS_PER_CHANNEL);
 	}
