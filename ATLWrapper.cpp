@@ -9,13 +9,13 @@
 #include "ATLWrapper.h"
 
 //for debugging
-RSP_UINT32 dbg1;
-RSP_UINT32 dbg2;
-RSP_UINT32 dbg3;
-RSP_UINT32 dbg4;
-RSP_UINT32 dbg5;
-RSP_UINT32 dbg6;
-RSP_UINT32 dbg7;
+static RSP_UINT32 dbg1;
+static RSP_UINT32 dbg2;
+static RSP_UINT32 dbg3;
+static RSP_UINT32 dbg4;
+static RSP_UINT32 dbg5;
+static RSP_UINT32 dbg6;
+static RSP_UINT32 dbg7;
 
 RSP_UINT32 dbg_issue = 0;
 RSP_UINT32 dbg_wait_pending = 0;
@@ -329,6 +329,12 @@ namespace Hesper{
 		for (loop = 0; loop < TOTAL_MAP_BLK * PAGES_PER_BLK; loop++)
 			MAPP2L[loop] = VC_MAX;
 		RSPOSAL::RSP_MemSet(CACHE_ADDR, 0xffffffff, CMT_size);
+
+		dbg1 = REMAP_CMD_IN_PAGE;
+		dbg2 = TWRITE_CMD_IN_PAGE;
+		dbg3 = RW_LOG_START_IN_PAGE;
+		dbg4 = JN_LOG_START_IN_PAGE;
+	
 
 		return true;
 	}
@@ -853,6 +859,11 @@ namespace Hesper{
 			return NULL;
 		}
 
+		if(!twrite_entry){
+			*oLPN=tLPN;
+			return NULL;
+		}
+
 		offset = tLPN * NUM_FTL_CORE + THIS_CORE - twrite_entry->addr_start;
 		//RSP_ASSERT((tLPN * NUM_FTL_CORE + THIS_CORE >= twrite_entry->addr_start));
 		if(tLPN * NUM_FTL_CORE + THIS_CORE < twrite_entry->addr_start){
@@ -871,6 +882,8 @@ namespace Hesper{
 		if (twrite_entry->o_addr[offset] == RSP_INVALID_LPN)
 			*oLPN = RSP_INVALID_LPN;
 
+		if(twrite_entry->o_addr[offset] == 0x3fffffff)
+			*oLPN = tLPN;
 		//dbg
 		twrite_entry->write_complete[offset] = true;
 
@@ -890,6 +903,8 @@ namespace Hesper{
 				return twrite_entry;
 			}
 		}
+
+		return NULL;
 
 		dbg1 = tLPN;
 		dbg2 = THIS_CORE;
@@ -965,6 +980,9 @@ namespace Hesper{
 			insert_remap_entry(remap_entry, &JN_remap_list);
 			m_pVFLWrapper->RSP_INC_ProfileData(Prof_JN_Remap_cnt, 1);
 			do_remap(SHRD_JN);
+		}
+		else if(remap_entry->remap_count == 0){
+			insert_remap_entry(remap_entry, &free_remap_list);
 		}
 		else{
 			dbg2 = RW_LOG_START_IN_PAGE;
@@ -1273,7 +1291,8 @@ namespace Hesper{
 					else if (LPN[loop] >= RW_LOG_START_IN_PAGE){
 						write_type = SHRD_RW;
 						twrite_entry = find_twrite_oLPN(LPN[loop], &oLPN);
-						twrite_entry->remained--;
+						if(twrite_entry)
+							twrite_entry->remained--;
 					}
 					else{
 						write_type = SHRD_JN;
@@ -3136,10 +3155,11 @@ do_erase:
 		/*for (RSP_UINT32 write_type = 0; write_type < WRITE_TYPE_NUM; write_type++){
 			write_buffer_flush(channel, bank, write_type);
 		}*/
-
+#if (!IS_BACKFLUSH)
 		map_flush();
+#endif
 		BBP_flush();
-		WAIT_PROGRAMPENDING();
+		//WAIT_PROGRAMPENDING();
 		bank_meta_flush(channel, bank);
 		WAIT_PROGRAMPENDING();
 		m_pVFLWrapper->RSP_INC_ProfileData(Prof_num_flush, 1);
@@ -3386,61 +3406,40 @@ do_erase:
 	}
 
 	RSP_BOOL ATLWrapper::Issue(RSPProgramOp* RSPOp){
-		m_pVFLWrapper->Issue(RSPOp, &dbg_issue);
-		if(dbg_issue != 0 && dbg_issue != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->Issue(RSPOp);
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::MetaIssue(RSPProgramOp* RSPOp){
-		m_pVFLWrapper->MetaIssue(RSPOp, &dbg_issue);
-		if(dbg_issue != 0 && dbg_issue != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->MetaIssue(RSPOp);
+
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::Issue(RSPReadOp RSPOp){
-		m_pVFLWrapper->Issue(RSPOp, &dbg_issue);
-		if(dbg_issue != 0 && dbg_issue != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->Issue(RSPOp);
+
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::MetaIssue(RSPReadOp RSPOp){
-		m_pVFLWrapper->MetaIssue(RSPOp, &dbg_issue);
-		if(dbg_issue != 0 && dbg_issue != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->MetaIssue(RSPOp);
+
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::Issue(RSPEraseOp* RSPOp){
-		m_pVFLWrapper->Issue(RSPOp, &dbg_issue);
-		if(dbg_issue != 0 && dbg_issue != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->Issue(RSPOp);
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::WAIT_PROGRAMPENDING(){
-		m_pVFLWrapper->WAIT_PROGRAMPENDING(&dbg_wait_pending);
-		if(dbg_wait_pending != 0 && dbg_wait_pending != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->WAIT_PROGRAMPENDING();
 		return 0;
 	}
 	RSP_BOOL ATLWrapper::WAIT_ERASEPENDING(){
 
-		m_pVFLWrapper->WAIT_ERASEPENDING(&dbg_wait_pending);
-		if(dbg_wait_pending != 0 && dbg_wait_pending != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->WAIT_ERASEPENDING();
 		return 0;
 	}
 
 	RSP_BOOL ATLWrapper::WAIT_READPENDING(){
-		m_pVFLWrapper->WAIT_READPENDING(&dbg_wait_pending);
-		if(dbg_wait_pending != 0 && dbg_wait_pending != 14){
-			RSP_ASSERT(0);
-		}
+		m_pVFLWrapper->WAIT_READPENDING();
 		return 0;
 	}
 

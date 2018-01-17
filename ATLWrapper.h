@@ -30,7 +30,7 @@
 #define RSP_BYTES_PER_PAGE (BYTES_PER_SECTOR * SECTORS_PER_PAGE)
 	
 //test
-//#define BLKS_PER_PLANE (128)
+//#define BLKS_PER_PLANE (512)
 
 #define BLKS_PER_PLANE RSP_BLOCK_PER_PLANE
 #define BLKS_PER_BANK BLKS_PER_PLANE
@@ -45,12 +45,14 @@
 #define IS_DFTL (1) //FPM on off, when the FPM, CMT size must be 72MB
 #define IS_INCGC (1) //incremental GC on off
 #define IS_GCMAPLOG (1) //map logging on GC on/off
+#define IS_BACKFLUSH (1) // flush mapping table not at changing active block, but at background flushing
+
 #define NUM_READ_PER_INCGC 2
 
 		static RSP_UINT32 OP_BLKS = 7264;
 		static RSP_UINT32 NUM_LBLK;
 		static RSP_UINT32 NUM_PBLK;
-		static RSP_UINT32 CMT_size = 64 * KB; //2MB
+		static RSP_UINT32 CMT_size = 128 * KB; //2MB
 
 	struct cache_map{
 		RSP_UINT16 cache_slot;
@@ -78,7 +80,7 @@
 		//VPN layout
 		// |--channel--|--bank--|--block--|--plane--|--page--|--high-low--|
 	
-#define RW_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
+#define RW_LOG_SIZE_IN_PAGE (524288) //for test
 #define RW_LOG_START_IN_PAGE (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE - RW_LOG_SIZE_IN_PAGE)
 #define JN_LOG_SIZE_IN_PAGE (64 * MB >> 12) //for test
 #define JN_LOG_START_IN_PAGE RW_LOG_START_IN_PAGE - JN_LOG_SIZE_IN_PAGE
@@ -86,9 +88,9 @@
 #define JN_SUPERBLK_PAGE_IDX JN_LOG_START_IN_PAGE - 1	//first page in the JN log is super block
 		//JN block group should be switched when the super block is written.
 	
-#define NUM_MAX_TWRITE (32)
-#define NUM_MAX_REMAP (32)
-#define NUM_MAX_TWRITE_ENTRY (128)
+#define NUM_MAX_TWRITE (128)
+#define NUM_MAX_REMAP (128)
+#define NUM_MAX_TWRITE_ENTRY (1022)
 #define NUM_MAX_REMAP_ENTRY  (511)
 	
 #define TWRITE_CMD_IN_PAGE  (NUM_LBLK * PAGES_PER_BLK * LPAGE_PER_PPAGE)
